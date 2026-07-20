@@ -213,6 +213,10 @@ async def build_dashboard(
         .to_list(50)
     )
 
+    # Older meals may predate thumbnails; generate them once, lazily.
+    from images import backfill_thumbnails
+    await backfill_thumbnails(db, user_id, meals)
+
     water = await db.water_logs.find(
         {
             "user_id": user_id,

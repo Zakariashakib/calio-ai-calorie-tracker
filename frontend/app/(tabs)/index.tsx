@@ -217,9 +217,16 @@ function MealCard({ meal, goalCalories }: { meal: Meal; goalCalories: number }) 
   return (
     <View style={styles.mealCard} testID={`today-meal-${meal.meal_id}`}>
       <View style={styles.mealTop}>
-        <View style={[styles.mealThumb, { backgroundColor: visual.soft }]}>
-          <Ionicons name={visual.icon} size={24} color={visual.color} />
-        </View>
+        {meal.thumbnail_base64 ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${meal.thumbnail_base64}` }}
+            style={styles.mealThumb}
+          />
+        ) : (
+          <View style={[styles.mealThumb, styles.mealThumbFallback, { backgroundColor: visual.soft }]}>
+            <Ionicons name={visual.icon} size={24} color={visual.color} />
+          </View>
+        )}
         <View style={styles.mealCopy}>
           <Text style={styles.mealName}>{meal.meal_type}</Text>
           <Text style={styles.mealTime}>{dayjs(meal.eaten_at).format("hh:mm A")}</Text>
@@ -317,6 +324,8 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
+  },
+  mealThumbFallback: {
     alignItems: "center",
     justifyContent: "center",
   },

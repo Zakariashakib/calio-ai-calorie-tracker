@@ -183,9 +183,16 @@ function ScanCard({ meal }: { meal: Meal }) {
       onPress={() => router.push({ pathname: "/meal/[id]", params: { id: meal.meal_id } })}
       testID={`history-scan-${meal.meal_id}`}
     >
-      <View style={[styles.scanThumb, { backgroundColor: visual.soft }]}>
-        <Ionicons name={visual.icon} size={44} color={visual.color} />
-      </View>
+      {meal.thumbnail_base64 ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${meal.thumbnail_base64}` }}
+          style={styles.scanThumb}
+        />
+      ) : (
+        <View style={[styles.scanThumb, styles.thumbFallback, { backgroundColor: visual.soft }]}>
+          <Ionicons name={visual.icon} size={44} color={visual.color} />
+        </View>
+      )}
       <Text style={styles.scanName} numberOfLines={2}>
         {meal.title}
       </Text>
@@ -206,9 +213,16 @@ function MealRow({ meal }: { meal: Meal }) {
       onPress={() => router.push({ pathname: "/meal/[id]", params: { id: meal.meal_id } })}
       testID={`history-meal-${meal.meal_id}`}
     >
-      <View style={[styles.rowThumb, { backgroundColor: visual.soft }]}>
-        <Ionicons name={visual.icon} size={20} color={visual.color} />
-      </View>
+      {meal.thumbnail_base64 ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${meal.thumbnail_base64}` }}
+          style={styles.rowThumb}
+        />
+      ) : (
+        <View style={[styles.rowThumb, styles.thumbFallback, { backgroundColor: visual.soft }]}>
+          <Ionicons name={visual.icon} size={20} color={visual.color} />
+        </View>
+      )}
       <View style={styles.rowCopy}>
         <Text style={styles.rowName} numberOfLines={1}>
           {meal.title}
@@ -279,6 +293,8 @@ const styles = StyleSheet.create({
     width: 118,
     height: 118,
     borderRadius: 59,
+  },
+  thumbFallback: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -304,8 +320,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
   },
   rowCopy: { flex: 1, gap: 2 },
   rowName: { fontSize: 15, fontWeight: "700", color: colors.ink },

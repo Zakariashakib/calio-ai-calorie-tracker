@@ -31,6 +31,7 @@ from ai_service import (
     transcribe_and_parse,
 )
 from auth import exchange_session, require_user
+from images import backfill_thumbnails, make_thumbnail
 from models import (
     AIConfigPublic,
     AIConfigSchema,
@@ -250,6 +251,7 @@ async def create_meal(
 
     doc = {
         **payload.model_dump(),
+        "thumbnail_base64": make_thumbnail(payload.image_base64),
         "meal_id": f"meal_{os.urandom(6).hex()}",
         "user_id": user.user_id,
         "day": iso_day(payload.eaten_at),
@@ -290,6 +292,9 @@ async def update_meal(
         "day": iso_day(payload.eaten_at),
         "totals": totals.model_dump(),
     }
+
+    if payload.image_base64:
+        updates["thumbnail_base64"] = make_thumbnail(payload.image_base64)
 
     result = await db.meals.update_one(
         {
@@ -338,7 +343,7 @@ async def delete_meal(
 async def food_history(
     user: UserPublic = Depends(require_user),
 ):
-    return await (
+    meals = await (
         db.meals.find(
             {"user_id": user.user_id},
             {
@@ -350,6 +355,11 @@ async def food_history(
         .limit(100)
         .to_list(100)
     )
+
+    # Older meals may predate thumbnails; generate them once, lazily.
+    await backfill_thumbnails(db, user.user_id, meals)
+
+    return meals
 
 
 @api_router.post("/water")

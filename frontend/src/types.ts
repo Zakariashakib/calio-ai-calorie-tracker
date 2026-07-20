@@ -33,6 +33,7 @@ export type Meal = {
   totals: Nutrients;
   source: string;
   image_base64?: string;
+  thumbnail_base64?: string;
 };
 
 export type Goals = {

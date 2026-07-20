@@ -100,6 +100,7 @@ class MealCreate(BaseModel):
 
 class MealResponse(MealCreate):
     meal_id: str
+    thumbnail_base64: Optional[str] = None
     user_id: str
     totals: Nutrients
     created_at: str
