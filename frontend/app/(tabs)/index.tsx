@@ -19,7 +19,7 @@ import { Toast } from "@/src/components/Toast";
 import { ArcMeter } from "@/src/components/ui/ArcMeter";
 import { IconButton } from "@/src/components/ui/IconButton";
 import { foodVisual } from "@/src/food-visuals";
-import { RECIPES } from "@/src/recipes-data";
+import { mapRecipe, type Recipe, type RecipeListResponse } from "@/src/recipes-data";
 import { colors, radius, shadows } from "@/src/theme";
 import type { Dashboard, Meal } from "@/src/types";
 
@@ -28,11 +28,18 @@ export default function TodayScreen() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
 
   const load = useCallback(async () => {
     try {
       setData(await api<Dashboard>("/dashboard"));
       setError(false);
+      try {
+        const res = await api<RecipeListResponse>("/recipes");
+        setRecipes(res.recipes.map(mapRecipe));
+      } catch {
+        // Recipes teaser is optional; keep the dashboard usable if it fails.
+      }
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Could not load today");
       setError(true);
@@ -156,13 +163,14 @@ export default function TodayScreen() {
         </View>
 
         {/* Recipes teaser */}
+        {recipes.length ? (
         <PressableScale
           style={styles.recipesCard}
           onPress={() => router.push("/recipes")}
           testID="open-recipes-button"
         >
           <View style={styles.recipeThumbs}>
-            {RECIPES.slice(0, 3).map((recipe, index) => (
+            {recipes.slice(0, 3).map((recipe, index) => (
               <Image
                 key={recipe.id}
                 source={{ uri: recipe.image }}
@@ -174,13 +182,14 @@ export default function TodayScreen() {
             <View style={styles.recipesTitleRow}>
               <Text style={styles.recipesTitle}>Trending Recipes</Text>
               <View style={styles.recipesBadge}>
-                <Text style={styles.recipesBadgeText}>{RECIPES.length}</Text>
+                <Text style={styles.recipesBadgeText}>{recipes.length}</Text>
               </View>
             </View>
             <Text style={styles.recipesSub}>Fresh ideas matched to your goals</Text>
           </View>
           <Ionicons name="chevron-forward" size={17} color={colors.faint} />
         </PressableScale>
+        ) : null}
 
         {/* Quick shortcuts */}
         <View style={styles.shortcutRow}>
