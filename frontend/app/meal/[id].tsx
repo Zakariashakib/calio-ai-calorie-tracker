@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 
-import { api } from "@/src/api";
+import { api, authedMediaUrl } from "@/src/api";
 import { AppScreen } from "@/src/components/AppScreen";
 import { MetricCard } from "@/src/components/NutritionUi";
 import { PressableScale } from "@/src/components/PressableScale";
@@ -27,6 +27,7 @@ type MealType = (typeof MEAL_TYPES)[number];
 export default function MealDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [meal, setMeal] = useState<Meal | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -42,6 +43,24 @@ export default function MealDetailScreen() {
       .catch(() => setMeal(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Full photos are served as cacheable URLs; legacy meals fall back to
+  // the inline base64 payload.
+  useEffect(() => {
+    if (!meal) {
+      setPhotoUri(null);
+      return;
+    }
+    if (meal.photo_url) {
+      authedMediaUrl(`/meals/${meal.meal_id}/photo`)
+        .then(setPhotoUri)
+        .catch(() => setPhotoUri(null));
+    } else if (meal.image_base64 || meal.thumbnail_base64) {
+      setPhotoUri(`data:image/jpeg;base64,${meal.image_base64 ?? meal.thumbnail_base64}`);
+    } else {
+      setPhotoUri(null);
+    }
+  }, [meal]);
 
   const startEdit = () => {
     if (!meal) return;
@@ -344,12 +363,18 @@ export default function MealDetailScreen() {
         </View>
       </View>
       <View style={styles.hero}>
-        {meal.image_base64 || meal.thumbnail_base64 ? (
+        {photoUri || meal.thumbnail_base64 ? (
           <Image
-            source={{ uri: `data:image/jpeg;base64,${meal.image_base64 ?? meal.thumbnail_base64}` }}
+            source={{ uri: photoUri ?? `data:image/jpeg;base64,${meal.thumbnail_base64}` }}
             style={styles.mealPhoto}
             resizeMode="cover"
             testID="meal-detail-photo"
+            onError={() => {
+              // Photo endpoint failed (e.g. storage outage): show thumbnail.
+              if (meal.thumbnail_base64 && photoUri && !photoUri.startsWith("data:")) {
+                setPhotoUri(`data:image/jpeg;base64,${meal.thumbnail_base64}`);
+              }
+            }}
           />
         ) : (
           <View style={styles.mealIcon}>

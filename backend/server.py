@@ -31,7 +31,11 @@ from ai_service import (
     test_ai_prompt,
     transcribe_and_parse,
 )
-from auth import exchange_session, require_user
+import base64 as b64
+
+from fastapi.responses import Response
+
+from auth import exchange_session, require_user, require_user_flexible
 from dev_auth import dev_auth_router  # DEV-ONLY: remove before production (see replit.md)
 from images import (
     backfill_thumbnails,
@@ -40,7 +44,7 @@ from images import (
 )
 from storage import (
     delete_image,
-    download_image_base64,
+    download_image_bytes,
     meal_image_key,
     migrate_images_to_storage,
     upload_image_base64,
@@ -304,6 +308,7 @@ async def create_meal(
     # Echo the photo back so the client can render it without a refetch.
     if doc.get("image_key") and payload.image_base64:
         doc["image_base64"] = compressed
+        doc["photo_url"] = f"/api/meals/{meal_id}/photo"
 
     # Auto-refresh challenge progress whenever a meal is logged
     try:
@@ -336,11 +341,56 @@ async def get_meal(
             detail="Meal not found",
         )
 
-    # Full photos live in object storage; hydrate for the detail view.
-    if not doc.get("image_base64") and doc.get("image_key"):
-        doc["image_base64"] = await download_image_base64(doc["image_key"])
+    # Full photos live in object storage; the client fetches them through
+    # the dedicated photo endpoint so the browser can cache them. Legacy
+    # meals whose photo is still inline keep returning image_base64.
+    if doc.get("image_key"):
+        doc["photo_url"] = f"/api/meals/{meal_id}/photo"
 
     return MealResponse(**doc)
+
+
+@api_router.get("/meals/{meal_id}/photo")
+async def get_meal_photo(
+    meal_id: str,
+    user: UserPublic = Depends(require_user_flexible),
+):
+    doc = await db.meals.find_one(
+        {
+            "meal_id": meal_id,
+            "user_id": user.user_id,
+        },
+        {"_id": 0, "image_key": 1, "image_base64": 1},
+    )
+
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail="Meal not found",
+        )
+
+    raw: bytes | None = None
+    if doc.get("image_key"):
+        raw = await download_image_bytes(doc["image_key"])
+
+    # Legacy meals (or storage outages) may still hold the photo inline.
+    if raw is None and doc.get("image_base64"):
+        try:
+            raw = b64.b64decode(doc["image_base64"])
+        except Exception:
+            raw = None
+
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Photo not found",
+        )
+
+    return Response(
+        content=raw,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @api_router.put(
@@ -405,8 +455,8 @@ async def update_meal(
         {"_id": 0},
     )
 
-    if not doc.get("image_base64") and doc.get("image_key"):
-        doc["image_base64"] = await download_image_base64(doc["image_key"])
+    if doc.get("image_key"):
+        doc["photo_url"] = f"/api/meals/{meal_id}/photo"
 
     return MealResponse(**doc)
 

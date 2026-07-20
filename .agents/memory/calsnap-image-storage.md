@@ -26,3 +26,6 @@ bounded JPEG (max 1280px, q75) via `compress_full_image` before upload.
 
 ## AI recipe photos (per-recipe)
 AI-generated recipes get a distinct image via Pollinations (keyless, seed = hash(title)) validated with an httpx GET; any failure falls back to the static RECIPE_CATEGORY_IMAGES entry. Pollinations rate-limits under concurrency, so a fresh batch may serve several category fallbacks — that's expected, not a bug. LoremFlickr was rejected: it returns a generic placeholder ("defaultImage") when no keyword matches.
+
+## Serving photos as URLs
+Meal detail no longer embeds full `image_base64`; it returns a `photo_url` (`/api/meals/{id}/photo`) when `image_key` exists. The photo endpoint streams `image/jpeg` with `Cache-Control: private, max-age=86400`. It authenticates via `require_user_flexible` (Bearer header OR `?token=` query param) because `<Image>`/`<img>` tags cannot send headers. Legacy/inline meals (no image_key) keep returning inline base64 and no photo_url; the photo endpoint also falls back to decoding inline base64.

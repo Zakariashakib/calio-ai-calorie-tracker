@@ -162,6 +162,7 @@ class MealCreate(BaseModel):
 class MealResponse(MealCreate):
     meal_id: str
     image_key: Optional[str] = None
+    photo_url: Optional[str] = None
     thumbnail_base64: Optional[str] = None
     user_id: str
     totals: Nutrients

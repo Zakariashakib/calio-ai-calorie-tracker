@@ -12,6 +12,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Build an authenticated URL for image endpoints (Image tags cannot send headers). */
+export async function authedMediaUrl(path: string): Promise<string> {
+  const token = await storage.secureGet(TOKEN_KEY, null);
+  return `${API_BASE}/api${path}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await storage.secureGet(TOKEN_KEY, null);
   const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;

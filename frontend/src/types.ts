@@ -34,6 +34,7 @@ export type Meal = {
   source: string;
   image_base64?: string;
   thumbnail_base64?: string;
+  photo_url?: string;
 };
 
 export type Goals = {

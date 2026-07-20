@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import httpx
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Query
 
 from models import UserPublic
 
@@ -91,8 +91,6 @@ async def exchange_session(
 async def require_user(
     authorization: str | None = Header(default=None),
 ) -> UserPublic:
-    from server import db
-
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -100,6 +98,32 @@ async def require_user(
         )
 
     token = authorization.removeprefix("Bearer ").strip()
+    return await _user_from_token(token)
+
+
+async def require_user_flexible(
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> UserPublic:
+    """Auth via Bearer header or `?token=` query param.
+
+    The query-param form exists for <img>/Image tags, which cannot send
+    custom headers; only use it on media endpoints.
+    """
+    if authorization and authorization.startswith("Bearer "):
+        return await _user_from_token(
+            authorization.removeprefix("Bearer ").strip()
+        )
+    if token:
+        return await _user_from_token(token.strip())
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required",
+    )
+
+
+async def _user_from_token(token: str) -> UserPublic:
+    from server import db
 
     # DEV-ONLY guard: sessions minted by the temporary dev login are never
     # valid in production deployments, even if the session store is shared.

@@ -45,6 +45,16 @@ async def upload_image_base64(key: str, image_base64: str) -> bool:
         return False
 
 
+async def download_image_bytes(key: str) -> bytes | None:
+    """Fetch an image from object storage as raw bytes, or None on failure."""
+    try:
+        client = _get_client()
+        return await asyncio.to_thread(client.download_as_bytes, key)
+    except Exception:
+        logger.warning("Object storage download failed for %s", key, exc_info=True)
+        return None
+
+
 async def download_image_base64(key: str) -> str | None:
     """Fetch an image from object storage as base64, or None on failure."""
     try:
