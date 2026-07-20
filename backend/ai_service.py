@@ -503,6 +503,139 @@ Confidence is 0 to 1. Mention uncertainty for mixed dishes and visually hidden i
     )
 
 
+RECIPE_CATEGORY_IMAGES = {
+    "Vegan": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=900&q=80",
+    "Protein": "https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=900&q=80",
+    "Snacks": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80",
+    "Sweets": "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=900&q=80",
+}
+_DEFAULT_RECIPE_IMAGE = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=900&q=80"
+
+_DIFFICULTY_LABELS = {1: "Easy", 2: "Medium", 3: "Hard"}
+
+
+def _coerce_generated_recipe(item: dict) -> Optional[dict]:
+    """Normalize one AI-generated recipe into the exact catalog shape.
+
+    Returns None when the recipe is missing required content so callers can
+    drop it instead of serving a broken entry.
+    """
+    try:
+        title = str(item.get("title", "")).strip()
+        ingredients = [str(x).strip() for x in item.get("ingredients", []) if str(x).strip()]
+        steps = [str(x).strip() for x in item.get("steps", []) if str(x).strip()]
+        if not title or not ingredients or not steps:
+            return None
+
+        category = str(item.get("category", "")).strip()
+        if category not in RECIPE_CATEGORY_IMAGES:
+            category = "Protein"
+
+        difficulty = int(item.get("difficulty", 2))
+        difficulty = min(max(difficulty, 1), 3)
+
+        return {
+            "id": f"ai-{uuid4().hex[:10]}",
+            "title": title,
+            "minutes": max(int(item.get("minutes", 30)), 1),
+            "difficulty": difficulty,
+            "difficulty_label": _DIFFICULTY_LABELS[difficulty],
+            "category": category,
+            "image": RECIPE_CATEGORY_IMAGES.get(category, _DEFAULT_RECIPE_IMAGE),
+            "kcal": max(int(item.get("kcal", 0)), 0),
+            "protein_g": max(int(item.get("protein_g", 0)), 0),
+            "carbs_g": max(int(item.get("carbs_g", 0)), 0),
+            "fat_g": max(int(item.get("fat_g", 0)), 0),
+            "fiber_g": max(int(item.get("fiber_g", 0)), 0),
+            "description": str(item.get("description", "")).strip() or title,
+            "ingredients": ingredients,
+            "steps": steps,
+        }
+    except (TypeError, ValueError):
+        return None
+
+
+async def generate_recipes(
+    profile: Optional[dict],
+    count: int = 6,
+    exclude_titles: Optional[list] = None,
+) -> list:
+    """Ask the AI for goal-matched recipes in the catalog shape.
+
+    Returns an empty list when no AI key is configured (mirrors the
+    _no_ai_scan_response pattern — callers fall back to the curated catalog).
+    Raises HTTPException on AI/parse failures so callers can decide to fall back.
+    """
+    config = await get_active_ai_config()
+    if not _has_any_key(config):
+        logger.warning("generate_recipes called but no AI key is configured — caller should fall back to catalog")
+        return []
+
+    goals = (profile or {}).get("goals") or {}
+    goal_direction = (profile or {}).get("goal", "maintain")
+    diet = (profile or {}).get("diet_preference") or (profile or {}).get("dietary_preference") or "no restriction"
+
+    goal_lines = []
+    if goals.get("calories"):
+        goal_lines.append(f"Daily calorie target: {goals['calories']} kcal (aim each recipe near 1/3 of this).")
+    if goals.get("protein_g"):
+        goal_lines.append(f"Daily protein target: {goals['protein_g']} g.")
+    goal_lines.append(f"Overall goal: {goal_direction} weight.")
+    goal_lines.append(f"Dietary preference: {diet}.")
+    goals_text = "\n".join(goal_lines)
+
+    exclude_text = ""
+    if exclude_titles:
+        exclude_text = "Do NOT repeat any of these recipes: " + ", ".join(exclude_titles[:40]) + "."
+
+    prompt = f"""
+Create {count} fresh, varied recipe ideas tailored to this user's nutrition goals.
+
+{goals_text}
+{exclude_text}
+
+Return exactly this strict JSON shape (no prose):
+{{
+  "recipes": [
+    {{
+      "title": "string",
+      "minutes": 0,
+      "difficulty": 1,
+      "category": "Vegan|Protein|Snacks|Sweets",
+      "kcal": 0,
+      "protein_g": 0,
+      "carbs_g": 0,
+      "fat_g": 0,
+      "fiber_g": 0,
+      "description": "one appetizing sentence",
+      "ingredients": ["quantity + ingredient"],
+      "steps": ["clear cooking step"]
+    }}
+  ]
+}}
+
+Rules: difficulty is 1 (easy), 2 (medium) or 3 (hard). Macros are realistic integers per serving.
+Include a mix of categories. Every recipe needs at least 4 ingredients and 3 steps.
+""".strip()
+
+    raw = await _complete(prompt, endpoint_name="recipes")
+    data = _json(raw)
+
+    recipes = []
+    for item in data.get("recipes", []):
+        coerced = _coerce_generated_recipe(item)
+        if coerced:
+            recipes.append(coerced)
+
+    if not recipes:
+        raise HTTPException(
+            status_code=502,
+            detail="AI returned no usable recipes",
+        )
+
+    return recipes
+
+
 async def transcribe_and_parse(
     file: UploadFile,
 ) -> dict:

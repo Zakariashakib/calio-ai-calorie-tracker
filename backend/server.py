@@ -23,6 +23,7 @@ from starlette.middleware.cors import CORSMiddleware
 from ai_service import (
     analyze_food,
     coach_reply,
+    generate_recipes,
     get_active_ai_config,
     get_public_ai_config,
     save_ai_config,
@@ -648,12 +649,120 @@ async def list_recipes(
     )
 
 
+GENERATED_RECIPES_TTL_SECONDS = 24 * 3600
+
+
+async def _get_generated_recipes_doc(user_id: str) -> Optional[dict]:
+    return await db.generated_recipes.find_one(
+        {"user_id": user_id}, {"_id": 0}
+    )
+
+
+def _recipe_summaries(recipes: List[dict], saved_ids: set) -> List[RecipeSummary]:
+    return [
+        RecipeSummary(
+            **{k: r[k] for k in (
+                "id", "title", "minutes", "difficulty", "difficulty_label",
+                "category", "image", "kcal", "protein_g", "carbs_g",
+                "fat_g", "fiber_g",
+            )},
+            saved=r["id"] in saved_ids,
+        )
+        for r in recipes
+    ]
+
+
+@api_router.post("/recipes/generate", response_model=RecipeListResponse)
+async def generate_fresh_recipes(
+    refresh: bool = Query(default=False),
+    user: UserPublic = Depends(require_user),
+):
+    """Return AI-generated, goal-matched recipes in the catalog shape.
+
+    Results are cached per user for 24h (pass refresh=true to force new
+    ideas). Falls back to the curated catalog when no AI key is configured
+    or the AI call fails.
+    """
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id}, {"_id": 0}
+    )
+    saved_ids = await _user_saved_recipe_ids(user.user_id)
+    matched = bool(profile and (profile.get("goals") or {}).get("calories"))
+
+    cached = await _get_generated_recipes_doc(user.user_id)
+    if cached and not refresh:
+        from datetime import datetime, timezone
+        try:
+            created = datetime.fromisoformat(cached["created_at"])
+            age = (datetime.now(timezone.utc) - created).total_seconds()
+        except (KeyError, ValueError):
+            age = GENERATED_RECIPES_TTL_SECONDS + 1
+        if age < GENERATED_RECIPES_TTL_SECONDS and cached.get("recipes"):
+            return RecipeListResponse(
+                categories=list(RECIPE_CATEGORIES),
+                recipes=_recipe_summaries(cached["recipes"], saved_ids),
+                matched_to_goals=cached.get("matched_to_goals", matched),
+            )
+
+    exclude_titles = [r["title"] for r in (cached or {}).get("recipes", [])]
+
+    try:
+        recipes = await generate_recipes(
+            profile, count=6, exclude_titles=exclude_titles
+        )
+    except HTTPException:
+        recipes = []
+
+    if not recipes:
+        # No AI key configured or AI failed — fall back to the curated
+        # catalog ranked against the user's goals (same shape).
+        ranked = _rank_recipes_for_goals(profile)
+        return RecipeListResponse(
+            categories=list(RECIPE_CATEGORIES),
+            recipes=_recipe_summaries(ranked, saved_ids),
+            matched_to_goals=matched,
+        )
+
+    await db.generated_recipes.update_one(
+        {"user_id": user.user_id},
+        {
+            "$set": {
+                "user_id": user.user_id,
+                "recipes": recipes,
+                "matched_to_goals": matched,
+                "created_at": now_iso(),
+            }
+        },
+        upsert=True,
+    )
+
+    return RecipeListResponse(
+        categories=list(RECIPE_CATEGORIES),
+        recipes=_recipe_summaries(recipes, saved_ids),
+        matched_to_goals=matched,
+    )
+
+
+async def _find_recipe(user_id: str, recipe_id: str) -> Optional[dict]:
+    """Look up a recipe in the curated catalog or the user's AI-generated set."""
+    recipe = next((r for r in RECIPES if r["id"] == recipe_id), None)
+    if recipe:
+        return recipe
+    doc = await _get_generated_recipes_doc(user_id)
+    if doc:
+        return next(
+            (r for r in doc.get("recipes", []) if r["id"] == recipe_id),
+            None,
+        )
+    return None
+
+
 @api_router.get("/recipes/{recipe_id}", response_model=RecipeDetail)
 async def get_recipe(
     recipe_id: str,
     user: UserPublic = Depends(require_user),
 ):
-    recipe = next((r for r in RECIPES if r["id"] == recipe_id), None)
+    recipe = await _find_recipe(user.user_id, recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -666,7 +775,7 @@ async def toggle_recipe_bookmark(
     payload: BookmarkInput,
     user: UserPublic = Depends(require_user),
 ):
-    if not any(r["id"] == payload.recipe_id for r in RECIPES):
+    if not await _find_recipe(user.user_id, payload.recipe_id):
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     op = "$addToSet" if payload.saved else "$pull"
