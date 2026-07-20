@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Platform,
   ScrollView,
   StyleSheet,
@@ -17,16 +19,45 @@ import { api } from "@/src/api";
 import { PermissionSheet } from "@/src/components/PermissionSheet";
 import { PressableScale } from "@/src/components/PressableScale";
 import { Toast } from "@/src/components/Toast";
+import { IconButton } from "@/src/components/ui/IconButton";
+import { MacroChip } from "@/src/components/ui/MacroChip";
 import { scanStore } from "@/src/scan-store";
-import { colors, radius, shadow } from "@/src/theme";
+import { colors, radius, shadows } from "@/src/theme";
 import type { ScanResult } from "@/src/types";
 
 const modes = [
-  { id: "meal",       label: "Meal",       hint: "Identify any meal" },
+  { id: "meal", label: "Meal", hint: "Identify any meal" },
   { id: "restaurant", label: "Restaurant", hint: "Restaurant portions" },
-  { id: "before",     label: "Before",     hint: "Before eating" },
-  { id: "after",      label: "After",      hint: "After eating" },
+  { id: "before", label: "Before", hint: "Before eating" },
+  { id: "after", label: "After", hint: "After eating" },
 ] as const;
+
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
+
+/** Animated lime scan-line sweeping inside the detection frame. */
+function ScanLine({ active }: { active: boolean }) {
+  const y = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!active) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(y, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(y, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: USE_NATIVE_DRIVER }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, y]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.scanLine,
+        { transform: [{ translateY: y.interpolate({ inputRange: [0, 1], outputRange: [6, 230] }) }] },
+      ]}
+    />
+  );
+}
 
 export default function ScanScreen() {
   const camera = useRef<CameraView>(null);
@@ -35,9 +66,9 @@ export default function ScanScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [mode, setMode] = useState<(typeof modes)[number]["id"]>("meal");
   const [analyzing, setAnalyzing] = useState(false);
+  const [preview, setPreview] = useState<ScanResult | null>(null);
   const [message, setMessage] = useState("");
 
-  // Track whether a "before" scan is stored for comparison
   const hasBefore = !!scanStore.getBefore();
 
   const beginCamera = () => {
@@ -67,7 +98,6 @@ export default function ScanScreen() {
       });
       const full = { ...result, image_base64: base64 };
 
-      // If this is a "before" scan, stash it and prompt for "after"
       if (mode === "before") {
         scanStore.setBefore(full);
         scanStore.set(full);
@@ -77,7 +107,12 @@ export default function ScanScreen() {
       }
 
       scanStore.set(full);
-      router.push("/scan-result");
+      setPreview(full);
+      setTimeout(() => {
+        setPreview(null);
+        setCameraOpen(false);
+        router.push("/scan-result");
+      }, 900);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Food analysis failed");
     } finally {
@@ -112,66 +147,106 @@ export default function ScanScreen() {
 
   // ── Live camera view ─────────────────────────────────────────────────────
   if (cameraOpen) {
+    const previewTotals = preview?.totals;
     return (
       <View style={styles.cameraPage} testID="ai-camera-screen">
         <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
         <SafeAreaView style={styles.cameraUi} edges={["top", "bottom"]}>
           <View style={styles.cameraTop}>
-            <PressableScale
-              style={styles.darkButton}
+            <IconButton
+              icon="close"
+              variant="dark"
               onPress={() => setCameraOpen(false)}
               testID="close-camera-button"
-            >
-              <Ionicons name="close" size={22} color="white" />
-            </PressableScale>
+            />
             <Text style={styles.cameraTitle}>
               {mode === "before" ? "Before Eating" : mode === "after" ? "After Eating" : "Scan your meal"}
             </Text>
-            <PressableScale style={styles.darkButton} onPress={choosePhoto} testID="camera-gallery-button">
-              <Ionicons name="images" size={20} color="white" />
-            </PressableScale>
+            <IconButton
+              icon="images"
+              variant="dark"
+              iconSize={19}
+              onPress={choosePhoto}
+              testID="camera-gallery-button"
+            />
           </View>
 
+          {/* Detection frame with lime brackets + scan line */}
           <View style={styles.detectionBox}>
             <View style={[styles.corner, styles.tl]} />
             <View style={[styles.corner, styles.tr]} />
             <View style={[styles.corner, styles.bl]} />
             <View style={[styles.corner, styles.br]} />
+            <ScanLine active={!analyzing && !preview} />
             {analyzing ? (
               <View style={styles.detecting}>
                 <ActivityIndicator color={colors.lime} />
                 <Text style={styles.detectingText}>Detecting food…</Text>
               </View>
+            ) : null}
+          </View>
+
+          {/* Detection result pill */}
+          <View style={styles.detectionInfo}>
+            {preview ? (
+              <>
+                <Text style={styles.detectedName}>{preview.meal_name}</Text>
+                <Text style={styles.detectedWeight}>{Math.round(preview.total_weight_g)} g</Text>
+                <View style={styles.macroChips}>
+                  <MacroChip
+                    kind="carbs"
+                    variant="card"
+                    value={`${Math.round(previewTotals?.carbs_g ?? 0)}g`}
+                  />
+                  <MacroChip
+                    kind="fats"
+                    variant="card"
+                    value={`${Math.round(previewTotals?.fat_g ?? 0)}g`}
+                  />
+                  <MacroChip
+                    kind="sugar"
+                    variant="card"
+                    value={`${Math.round(previewTotals?.sugar_g ?? 0)}g`}
+                  />
+                </View>
+              </>
             ) : (
-              <Text style={styles.frameText}>
-                {mode === "before" ? "Frame the full plate before eating" : mode === "after" ? "Frame the leftovers" : "Place the whole plate inside"}
+              <Text style={styles.frameHint}>
+                {mode === "before"
+                  ? "Frame the full plate before eating"
+                  : mode === "after"
+                    ? "Frame the leftovers"
+                    : "Place the whole plate inside the frame"}
               </Text>
             )}
           </View>
 
+          {/* Capture row */}
           <View style={styles.captureRow}>
-            <PressableScale
-              style={styles.sideAction}
+            <IconButton
+              icon="images"
+              variant="dark"
+              size={50}
+              iconSize={22}
               onPress={choosePhoto}
-              testID="camera-gallery-button"
-            >
-              <Ionicons name="images" color="white" size={22} />
-            </PressableScale>
+              testID="camera-gallery-side-button"
+            />
             <PressableScale
               style={styles.shutter}
               onPress={capture}
-              disabled={analyzing}
+              disabled={analyzing || !!preview}
               testID="capture-meal-button"
             >
               <View style={styles.shutterInner} />
             </PressableScale>
-            <PressableScale
-              style={styles.sideAction}
+            <IconButton
+              icon="barcode"
+              variant="dark"
+              size={50}
+              iconSize={23}
               onPress={() => router.push("/barcode")}
               testID="open-barcode-button"
-            >
-              <Ionicons name="barcode" color="white" size={23} />
-            </PressableScale>
+            />
           </View>
         </SafeAreaView>
       </View>
@@ -181,7 +256,6 @@ export default function ScanScreen() {
   // ── Scan landing screen ──────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.kicker}>AI MEAL SCAN</Text>
         <Text style={styles.title}>Log food in seconds.</Text>
@@ -190,7 +264,6 @@ export default function ScanScreen() {
         </Text>
       </View>
 
-      {/* Mode selector */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -212,95 +285,65 @@ export default function ScanScreen() {
         ))}
       </ScrollView>
 
-      {/* Mode hint */}
       <View style={styles.modeHintRow}>
         <Ionicons name="information-circle-outline" size={14} color={colors.muted} />
-        <Text style={styles.modeHint}>
-          {modes.find((m) => m.id === mode)?.hint}
-        </Text>
+        <Text style={styles.modeHint}>{modes.find((m) => m.id === mode)?.hint}</Text>
       </View>
 
       <View style={styles.content}>
-        {/* Scan visual tap target */}
-        <PressableScale
-          style={styles.scanVisual}
-          onPress={beginCamera}
-          testID="start-ai-camera-button"
-        >
+        {/* Scan visual tap target — lime brackets like the reference */}
+        <PressableScale style={styles.scanVisual} onPress={beginCamera} testID="start-ai-camera-button">
           <View style={styles.plate}>
             <View style={styles.greenFood} />
             <View style={styles.peachFood} />
             <View style={styles.yellowFood} />
           </View>
-          <View style={[styles.visualCorner, styles.tl]} />
-          <View style={[styles.visualCorner, styles.tr]} />
-          <View style={[styles.visualCorner, styles.bl]} />
-          <View style={[styles.visualCorner, styles.br]} />
+          <View style={[styles.visualCorner, styles.vtl]} />
+          <View style={[styles.visualCorner, styles.vtr]} />
+          <View style={[styles.visualCorner, styles.vbl]} />
+          <View style={[styles.visualCorner, styles.vbr]} />
           <View style={styles.scanBadge}>
-            <Ionicons name="scan" size={17} color={colors.greenDark} />
+            <Ionicons name="scan" size={16} color={colors.dark} />
             <Text style={styles.scanBadgeText}>Ready to scan</Text>
           </View>
         </PressableScale>
 
-        {/* Primary CTA */}
-        <PressableScale
-          style={styles.primary}
-          onPress={beginCamera}
-          testID="open-ai-camera-button"
-        >
-          <Ionicons name="camera" size={21} color="white" />
+        <PressableScale style={styles.primary} onPress={beginCamera} testID="open-ai-camera-button">
+          <Ionicons name="camera" size={20} color="white" />
           <Text style={styles.primaryText}>Open AI Camera</Text>
         </PressableScale>
 
-        {/* Quick actions row */}
         <View style={styles.quickRow}>
-          <PressableScale
-            style={styles.quick}
-            onPress={choosePhoto}
-            testID="choose-meal-photo-button"
-          >
-            <Ionicons name="images-outline" size={22} color={colors.greenDark} />
+          <PressableScale style={styles.quick} onPress={choosePhoto} testID="choose-meal-photo-button">
+            <Ionicons name="images-outline" size={22} color={colors.green} />
             <Text style={styles.quickTitle}>Photo</Text>
             <Text style={styles.quickText}>Choose from library</Text>
           </PressableScale>
 
-          <PressableScale
-            style={styles.quick}
-            onPress={() => router.push("/voice")}
-            testID="open-voice-log-button"
-          >
+          <PressableScale style={styles.quick} onPress={() => router.push("/voice")} testID="open-voice-log-button">
             <Ionicons name="mic-outline" size={22} color={colors.peach} />
             <Text style={styles.quickTitle}>Voice</Text>
             <Text style={styles.quickText}>Describe your meal</Text>
           </PressableScale>
 
-          <PressableScale
-            style={styles.quick}
-            onPress={() => router.push("/barcode")}
-            testID="open-barcode-scan-button"
-          >
+          <PressableScale style={styles.quick} onPress={() => router.push("/barcode")} testID="open-barcode-scan-button">
             <Ionicons name="barcode-outline" size={23} color={colors.ink} />
             <Text style={styles.quickTitle}>Barcode</Text>
             <Text style={styles.quickText}>Packaged food</Text>
           </PressableScale>
         </View>
 
-        {/* Before/After comparison card */}
         <PressableScale
           style={[styles.compareCard, hasBefore && styles.compareCardActive]}
           onPress={() => router.push("/comparison")}
           testID="open-comparison-button"
         >
           <View style={styles.compareIcon}>
-            <Ionicons
-              name="git-compare"
-              size={22}
-              color={hasBefore ? colors.greenDark : colors.muted}
-            />
+            <Ionicons name="git-compare" size={22} color={hasBefore ? colors.green : colors.muted} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.compareTitle, hasBefore && { color: colors.greenDark }]}>
-              Before & After Comparison
+              Before &amp; After Comparison
             </Text>
             <Text style={styles.compareText}>
               {hasBefore
@@ -308,17 +351,11 @@ export default function ScanScreen() {
                 : "Photo before & after eating to measure exact consumption"}
             </Text>
           </View>
-          {hasBefore && (
-            <View style={styles.compareBadge}>
-              <Ionicons name="checkmark-circle" size={16} color={colors.green} />
-            </View>
-          )}
+          {hasBefore ? <Ionicons name="checkmark-circle" size={18} color={colors.green} /> : null}
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </PressableScale>
 
-        <Text style={styles.disclaimer}>
-          AI estimates can vary. Review portions before saving.
-        </Text>
+        <Text style={styles.disclaimer}>AI estimates can vary. Review portions before saving.</Text>
       </View>
 
       <PermissionSheet
@@ -342,8 +379,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
 
   header: { paddingHorizontal: 20, paddingTop: 18, gap: 6 },
-  kicker: { color: colors.greenDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
-  title: { color: colors.ink, fontSize: 30, fontWeight: "900", letterSpacing: -0.8 },
+  kicker: { color: colors.peach, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  title: { color: colors.ink, fontSize: 30, fontWeight: "800", letterSpacing: -0.8 },
   subtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, maxWidth: 340 },
 
   modeScroller: { maxHeight: 52, marginTop: 12, flexGrow: 0 },
@@ -372,9 +409,8 @@ const styles = StyleSheet.create({
   },
   modeHint: { color: colors.muted, fontSize: 11, fontWeight: "600" },
 
-  content: { flex: 1, paddingHorizontal: 20, gap: 13, paddingBottom: 90 },
+  content: { flex: 1, paddingHorizontal: 20, gap: 13, paddingBottom: 20 },
 
-  // Scan visual
   scanVisual: {
     flex: 1,
     minHeight: 200,
@@ -391,11 +427,7 @@ const styles = StyleSheet.create({
     borderRadius: 84,
     backgroundColor: "white",
     position: "relative",
-    shadowColor: colors.greenDark,
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+    ...shadows.card,
   },
   greenFood: {
     position: "absolute",
@@ -425,11 +457,11 @@ const styles = StyleSheet.create({
     right: 20,
     bottom: 27,
   },
-  visualCorner: { position: "absolute", width: 44, height: 44, borderColor: colors.green },
-  tl: { left: 22, top: 22, borderLeftWidth: 3, borderTopWidth: 3, borderTopLeftRadius: 14 },
-  tr: { right: 22, top: 22, borderRightWidth: 3, borderTopWidth: 3, borderTopRightRadius: 14 },
-  bl: { left: 22, bottom: 22, borderLeftWidth: 3, borderBottomWidth: 3, borderBottomLeftRadius: 14 },
-  br: { right: 22, bottom: 22, borderRightWidth: 3, borderBottomWidth: 3, borderBottomRightRadius: 14 },
+  visualCorner: { position: "absolute", width: 44, height: 44, borderColor: colors.lime },
+  vtl: { left: 22, top: 22, borderLeftWidth: 3, borderTopWidth: 3, borderTopLeftRadius: 14 },
+  vtr: { right: 22, top: 22, borderRightWidth: 3, borderTopWidth: 3, borderTopRightRadius: 14 },
+  vbl: { left: 22, bottom: 22, borderLeftWidth: 3, borderBottomWidth: 3, borderBottomLeftRadius: 14 },
+  vbr: { right: 22, bottom: 22, borderRightWidth: 3, borderBottomWidth: 3, borderBottomRightRadius: 14 },
   scanBadge: {
     position: "absolute",
     bottom: 18,
@@ -440,10 +472,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
+    ...shadows.subtle,
   },
-  scanBadgeText: { color: colors.greenDark, fontSize: 12, fontWeight: "800" },
+  scanBadgeText: { color: colors.dark, fontSize: 12, fontWeight: "800" },
 
-  // Buttons
   primary: {
     height: 54,
     borderRadius: radius.pill,
@@ -463,12 +495,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: 12,
     gap: 4,
-    ...shadow,
+    ...shadows.card,
   },
   quickTitle: { color: colors.ink, fontSize: 13, fontWeight: "800", marginTop: 4 },
   quickText: { color: colors.muted, fontSize: 10, lineHeight: 14 },
 
-  // Comparison card
   compareCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -478,12 +509,9 @@ const styles = StyleSheet.create({
     padding: 15,
     borderWidth: 1,
     borderColor: colors.line,
-    ...shadow,
+    ...shadows.card,
   },
-  compareCardActive: {
-    borderColor: colors.green,
-    backgroundColor: colors.greenSoft,
-  },
+  compareCardActive: { borderColor: colors.green, backgroundColor: colors.greenSoft },
   compareIcon: {
     width: 44,
     height: 44,
@@ -494,70 +522,68 @@ const styles = StyleSheet.create({
   },
   compareTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
   compareText: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
-  compareBadge: { marginRight: 4 },
 
   disclaimer: { textAlign: "center", color: colors.muted, fontSize: 11 },
 
-  // Camera styles
+  // ── Camera overlay ──
   cameraPage: { flex: 1, backgroundColor: "black" },
-  cameraUi: { flex: 1, paddingHorizontal: 18, justifyContent: "space-between" },
-  cameraTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  darkButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 17,
-    backgroundColor: "rgba(0,0,0,.45)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cameraTitle: { color: "white", fontSize: 15, fontWeight: "800" },
-  detectionBox: {
-    height: "50%",
-    marginHorizontal: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  detecting: {
-    backgroundColor: "rgba(0,0,0,.55)",
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  cameraUi: { flex: 1, justifyContent: "space-between", paddingHorizontal: 20 },
+  cameraTop: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 6,
   },
-  detectingText: { color: "white", fontWeight: "700" },
-  frameText: {
-    color: "white",
-    backgroundColor: "rgba(0,0,0,.42)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
-    fontSize: 12,
-    textAlign: "center",
+  cameraTitle: { color: "white", fontSize: 16, fontWeight: "700" },
+
+  detectionBox: {
+    alignSelf: "center",
+    width: "88%",
+    aspectRatio: 1,
+    maxHeight: 260,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
-  corner: { position: "absolute", width: 54, height: 54, borderColor: colors.lime },
+  corner: { position: "absolute", width: 46, height: 46, borderColor: colors.lime },
+  tl: { left: 0, top: 0, borderLeftWidth: 4, borderTopWidth: 4, borderTopLeftRadius: 18 },
+  tr: { right: 0, top: 0, borderRightWidth: 4, borderTopWidth: 4, borderTopRightRadius: 18 },
+  bl: { left: 0, bottom: 0, borderLeftWidth: 4, borderBottomWidth: 4, borderBottomLeftRadius: 18 },
+  br: { right: 0, bottom: 0, borderRightWidth: 4, borderBottomWidth: 4, borderBottomRightRadius: 18 },
+  scanLine: {
+    position: "absolute",
+    top: 0,
+    width: "82%",
+    height: 66,
+    borderRadius: 20,
+    backgroundColor: "rgba(182,236,79,0.28)",
+    borderBottomWidth: 2,
+    borderBottomColor: colors.lime,
+  },
+  detecting: { alignItems: "center", gap: 8 },
+  detectingText: { color: colors.lime, fontSize: 13, fontWeight: "700" },
+
+  detectionInfo: { alignItems: "center", gap: 6, paddingHorizontal: 10 },
+  detectedName: { color: "white", fontSize: 22, fontWeight: "800" },
+  detectedWeight: { color: "rgba(255,255,255,0.75)", fontSize: 14, fontWeight: "600" },
+  frameHint: { color: "rgba(255,255,255,0.8)", fontSize: 14, fontWeight: "600", textAlign: "center" },
+  macroChips: { flexDirection: "row", gap: 10, alignSelf: "stretch", marginTop: 8 },
+
   captureRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-around",
-    alignItems: "center",
-    paddingBottom: 14,
-  },
-  sideAction: {
-    width: 52,
-    height: 52,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,.52)",
-    alignItems: "center",
-    justifyContent: "center",
+    paddingBottom: 8,
   },
   shutter: {
     width: 78,
     height: 78,
     borderRadius: 39,
-    borderWidth: 4,
-    borderColor: "white",
+    backgroundColor: colors.dark,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.65)",
   },
-  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: "white" },
+  shutterInner: { width: 30, height: 30, borderRadius: 15, backgroundColor: "white" },
 });

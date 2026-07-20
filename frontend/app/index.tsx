@@ -1,147 +1,67 @@
-import {
-  Ionicons,
-} from "@expo/vector-icons";
-import {
-  LinearGradient,
-} from "expo-linear-gradient";
-import {
-  router,
-} from "expo-router";
-import {
-  useEffect,
-} from "react";
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
+import { useEffect } from "react";
+import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  PressableScale,
-} from "@/src/components/PressableScale";
-import {
-  useAuth,
-} from "@/src/auth-context";
-import {
-  colors,
-  radius,
-} from "@/src/theme";
+import { useAuth } from "@/src/auth-context";
+import { PressableScale } from "@/src/components/PressableScale";
+import { colors, radius, shadows } from "@/src/theme";
+
+const HERO_URI =
+  "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1100&q=80";
+
+function KcalTag({ label, style }: { label: string; style: object }) {
+  return (
+    <View style={[styles.tagWrap, style]}>
+      <View style={styles.tag}>
+        <Text style={styles.tagText}>{label}</Text>
+      </View>
+      <View style={styles.tagLine} />
+    </View>
+  );
+}
 
 export default function Index() {
-  const {
-    user,
-    loading,
-    signIn,
-    error,
-  } = useAuth();
+  const { user, loading, signIn, error } = useAuth();
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(
-        user.onboarding_complete
-          ? "/(tabs)"
-          : "/onboarding",
-      );
+      router.replace(user.onboarding_complete ? "/(tabs)" : "/onboarding");
     }
-  }, [
-    loading,
-    user,
-  ]);
+  }, [loading, user]);
 
   return (
-    <LinearGradient
-      colors={[
-        "#EFF7DF",
-        "#F4F1EC",
-        "#FFE8DB",
-      ]}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.brandRow}>
-          <View style={styles.logo}>
-            <Ionicons
-              name="leaf"
-              size={20}
-              color="white"
-            />
-          </View>
+    <View style={styles.container}>
+      {/* Food hero with floating kcal callouts */}
+      <View style={styles.heroWrap} testID="welcome-ai-visual">
+        <Image source={{ uri: HERO_URI }} style={styles.hero} resizeMode="cover" />
+        <LinearGradient
+          colors={["rgba(243,240,234,0)", "rgba(243,240,234,0)", colors.canvas]}
+          locations={[0, 0.62, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <KcalTag label="170 kcal" style={{ left: "9%", top: "24%" }} />
+        <KcalTag label="90 kcal" style={{ left: "42%", top: "38%" }} />
+        <KcalTag label="110 kcal" style={{ right: "10%", top: "20%" }} />
+      </View>
 
-          <Text style={styles.brand}>
-            CalSnap
-          </Text>
-        </View>
-
-        <View style={styles.hero}>
-          <View style={styles.orbitLarge} />
-          <View style={styles.orbitSmall} />
-
-          <View
-            style={styles.plate}
-            testID="welcome-ai-visual"
-          >
-            <View
-              style={[
-                styles.food,
-                styles.foodOne,
-              ]}
-            />
-            <View
-              style={[
-                styles.food,
-                styles.foodTwo,
-              ]}
-            />
-            <View
-              style={[
-                styles.food,
-                styles.foodThree,
-              ]}
-            />
-
-            <View
-              style={styles.scanCornerOne}
-            />
-            <View
-              style={styles.scanCornerTwo}
-            />
-
-            <View style={styles.calorieTag}>
-              <Text
-                style={styles.calorieText}
-              >
-                AI • 95%
-              </Text>
-            </View>
-          </View>
-        </View>
-
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <View style={styles.copy}>
-          <Text style={styles.eyebrow}>
-            YOUR FOOD, DECODED
-          </Text>
-
-          <Text style={styles.title}>
-            Nutrition clarity{"\n"}
-            in one snap.
-          </Text>
-
+          <Text style={styles.title}>Your Food,{"\n"}Decoded By AI</Text>
           <Text style={styles.subtitle}>
-            Scan meals, understand every
-            macro, and get coaching built
-            around your goals.
+            From scanning to tracking – everything{"\n"}happens automatically.
           </Text>
+        </View>
+
+        <View style={styles.dots}>
+          <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
+          <View style={styles.dot} />
         </View>
 
         {error ? (
-          <Text
-            style={styles.error}
-            testID="login-error-text"
-          >
+          <Text style={styles.error} testID="login-error-text">
             {error}
           </Text>
         ) : null}
@@ -153,213 +73,64 @@ export default function Index() {
           testID="google-login-button"
         >
           {loading ? (
-            <ActivityIndicator
-              color="white"
-            />
+            <ActivityIndicator color="white" />
           ) : (
-            <>
-              <Ionicons
-                name="logo-google"
-                size={19}
-                color="white"
-              />
-
-              <Text
-                style={styles.buttonText}
-              >
-                Continue with Google
-              </Text>
-            </>
+            <Text style={styles.buttonText}>Get Started</Text>
           )}
         </PressableScale>
 
         <Text style={styles.legal}>
-          By continuing, you agree to use
-          estimates as informational guidance.
+          Signs you in with Google. Estimates are informational guidance.
         </Text>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: colors.canvas },
+
+  heroWrap: { height: "52%", width: "100%" },
+  hero: { width: "100%", height: "100%" },
+
+  tagWrap: { position: "absolute", alignItems: "center" },
+  tag: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    ...shadows.floating,
   },
-  safe: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 18,
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingTop: 12,
-  },
-  logo: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: colors.greenDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brand: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  hero: {
-    height: 300,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  orbitLarge: {
-    position: "absolute",
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor:
-      "rgba(185,234,104,0.23)",
-  },
-  orbitSmall: {
-    position: "absolute",
-    width: 205,
-    height: 205,
-    borderRadius: 110,
-    borderWidth: 1,
-    borderColor:
-      "rgba(49,92,40,0.20)",
-  },
-  plate: {
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    backgroundColor: "white",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.greenDark,
-    shadowOffset: {
-      width: 0,
-      height: 18,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 25,
-    elevation: 8,
-  },
-  food: {
-    position: "absolute",
-    borderRadius: 999,
-  },
-  foodOne: {
-    width: 115,
-    height: 62,
-    backgroundColor: colors.green,
-    transform: [
-      {
-        rotate: "-18deg",
-      },
-    ],
-  },
-  foodTwo: {
-    width: 78,
-    height: 55,
-    backgroundColor: colors.peach,
-    left: 35,
-    top: 45,
-  },
-  foodThree: {
-    width: 72,
-    height: 48,
-    backgroundColor: colors.yellow,
-    right: 28,
-    bottom: 42,
-  },
-  scanCornerOne: {
-    position: "absolute",
-    left: 20,
-    top: 20,
-    width: 34,
-    height: 34,
-    borderLeftWidth: 3,
-    borderTopWidth: 3,
-    borderColor: colors.lime,
-    borderTopLeftRadius: 12,
-  },
-  scanCornerTwo: {
-    position: "absolute",
-    right: 20,
-    bottom: 20,
-    width: 34,
-    height: 34,
-    borderRightWidth: 3,
-    borderBottomWidth: 3,
-    borderColor: colors.lime,
-    borderBottomRightRadius: 12,
-  },
-  calorieTag: {
-    position: "absolute",
-    right: -22,
-    top: 35,
-    borderRadius: radius.pill,
-    backgroundColor: colors.dark,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-  },
-  calorieText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  copy: {
-    gap: 12,
-    marginTop: 8,
-  },
-  eyebrow: {
-    fontSize: 12,
-    letterSpacing: 2,
-    color: colors.greenDark,
-    fontWeight: "800",
-  },
+  tagText: { fontSize: 13, fontWeight: "700", color: colors.ink },
+  tagLine: { width: 1, height: 46, backgroundColor: "rgba(255,255,255,0.85)" },
+
+  safe: { flex: 1, paddingHorizontal: 24, paddingBottom: 14 },
+  copy: { alignItems: "center", gap: 14, marginTop: 6 },
   title: {
-    fontSize: 38,
-    lineHeight: 42,
-    letterSpacing: -1.3,
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
+    fontWeight: "800",
     color: colors.ink,
-    fontWeight: "900",
+    textAlign: "center",
   },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: colors.muted,
-    maxWidth: 340,
-  },
+  subtitle: { fontSize: 15, lineHeight: 22, color: colors.muted, textAlign: "center" },
+
+  dots: { flexDirection: "row", gap: 6, alignSelf: "center", marginTop: 18 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#D8D4CC" },
+  dotActive: { width: 18, borderRadius: 3, backgroundColor: colors.dark },
+
+  error: { color: colors.red, textAlign: "center", fontSize: 13, marginTop: 10 },
+
   button: {
     height: 58,
     backgroundColor: colors.dark,
     borderRadius: radius.pill,
-    flexDirection: "row",
-    gap: 12,
     alignItems: "center",
     justifyContent: "center",
     marginTop: "auto",
   },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  error: {
-    color: colors.red,
-    textAlign: "center",
-    fontSize: 13,
-  },
-  legal: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: 12,
-  },
+  buttonText: { color: "white", fontSize: 16, fontWeight: "700" },
+
+  legal: { fontSize: 11, lineHeight: 16, color: colors.faint, textAlign: "center", marginTop: 12 },
 });

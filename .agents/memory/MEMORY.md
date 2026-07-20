@@ -1,3 +1,4 @@
 - [CalSnap startup](calsnap-startup.md) — three-service startup (nohup + proxy); background `&` processes get suspended by job control unless wrapped with nohup.
 - [CalSnap challenge system](calsnap-challenges.md) — challenge progress auto-recomputed on every meal/water save; never trust stored streak, always recompute from DB.
 - [CalSnap proxy setup](calsnap-proxy.md) — Expo web (8082) + FastAPI (8001) unified behind http-proxy on port 5000; relative /api/* paths work in browser.
+- [CalSnap auth preview](calsnap-auth-preview.md) — logged-in screens can't be screenshotted (external OAuth + in-process mongomock); verify via throwaway public routes with mock data.
