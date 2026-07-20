@@ -10,4 +10,10 @@ Use `nohup sh -c '...' > logfile 2>&1 &` for background services. Plain `&` caus
 
 **How to apply:** See `start.sh` — backend (8001) and Expo (8082) are started with nohup, then proxy.js (5000) runs as the foreground process via `exec`.
 
-Port kill order: `fuser -k <port>/tcp` + `sleep 1` before re-binding avoids EADDRINUSE on restart.
+Port kill order: clear stale listeners + `sleep 1` before re-binding to avoid EADDRINUSE on restart.
+
+**Gotcha:** `fuser` is NOT installed in this environment, so a `fuser -k` cleanup line silently
+no-ops. Use `pkill -9 -f "uvicorn server:app"` / `pkill -9 -f "expo start --web"` instead.
+Symptom when this is wrong: backend log shows `[Errno 98] address already in use` on :8001 and
+the API is unreachable — a stale `uvicorn --reload` master from an earlier manual run survived
+the workflow restart (it's outside the workflow's process group, so SIGTERM never reaped it).

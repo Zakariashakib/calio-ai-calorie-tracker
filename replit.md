@@ -56,6 +56,28 @@ After adding the key, restart the workflow — no code changes needed.
 - **Before/After Comparison Screen** (`app/comparison.tsx`): Two-step photo flow with differential nutrition calculation via `POST /api/scan/compare`
 - **Automatic Challenge Progress** (`nutrition.py` + `server.py`): Streak and badge state recomputed on every meal/water save; `GET /challenges` returns live `ChallengeStatus` with `progress`, `goal`, `streak`, `badge_earned`
 
+## Temporary Development Login (REMOVE BEFORE PRODUCTION)
+A temporary email/password login exists **for development & testing only**, alongside the
+unchanged Google Sign-In:
+
+- **Test account**: `test@example.com` / `Test@123456` (dev workspace only)
+- **Production safety**: endpoints are hard-disabled whenever `REPLIT_DEPLOYMENT` is set
+  (i.e. in any Replit deployment), and the UI hides itself when the backend reports
+  `GET /api/auth/dev/status → {"enabled": false}`. Published apps only offer Google Sign-In
+  even before removal.
+- Dev sessions are ordinary 7-day sessions in `user_sessions`, so logout/expiry/`/auth/me`
+  behave exactly like Google sessions.
+
+### Removal checklist (when development & testing are complete)
+1. Delete `backend/dev_auth.py`
+2. In `backend/server.py`: remove the three `# DEV-ONLY` spots — the import line, `app.include_router(dev_auth_router)`, and the `purge_dev_artifacts` block inside `startup()`
+3. In `backend/auth.py`: remove the `# DEV-ONLY guard` block in `require_user` that rejects `devsess_` tokens
+4. Delete `frontend/src/components/DevLoginCard.tsx`
+5. In `frontend/src/auth-context.tsx`: remove the `devSignIn` type line and the `DEV-ONLY-START…END` block; restore the value memo to `{ user, loading, error, signIn, signOut, refreshUser }`
+6. In `frontend/app/index.tsx`: remove the `DevLoginCard` import and the `<DevLoginCard />` line
+7. Delete this section from `replit.md`
+8. Verify: `grep -rn "DEV-ONLY\|dev_auth\|DevLoginCard\|devsess_\|test@example.com" backend frontend/src frontend/app` returns nothing, then restart the workflow and confirm Google Sign-In + logout still work
+
 ## User Preferences
 - Keep existing stack: Expo SDK 54 + React Native + FastAPI + MongoDB
 - Apple-like premium design: warm cream canvas (`#F4F1EC`), forest green (`#315C28`), peach accents

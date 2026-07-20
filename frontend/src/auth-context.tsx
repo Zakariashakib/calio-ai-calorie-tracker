@@ -15,6 +15,8 @@ type AuthValue = {
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** DEV-ONLY: temporary email/password login — remove before production (see replit.md). */
+  devSignIn?: (email: string, password: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -123,7 +125,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     router.replace("/");
   }, []);
 
-  const value = useMemo(() => ({ user, loading, error, signIn, signOut, refreshUser }), [user, loading, error, signIn, signOut, refreshUser]);
+  // DEV-ONLY-START: temporary email/password login for development & testing.
+  // Remove this block, the devSignIn type above, and its usage in the value
+  // memo below before production (see replit.md removal checklist).
+  const devSignIn = useCallback(async (email: string, password: string) => {
+    setError(null);
+    const response = await fetch(`${API_BASE}/api/auth/dev/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { detail?: string };
+      throw new Error(body.detail ?? "Development sign-in failed");
+    }
+    const data = (await response.json()) as { user: User; session_token: string };
+    await storage.secureSet(TOKEN_KEY, data.session_token);
+    setUser(data.user);
+    router.replace(data.user.onboarding_complete ? "/(tabs)" : "/onboarding");
+  }, []);
+  // DEV-ONLY-END
+
+  const value = useMemo(
+    () => ({ user, loading, error, signIn, signOut, refreshUser, devSignIn }),
+    [user, loading, error, signIn, signOut, refreshUser, devSignIn],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

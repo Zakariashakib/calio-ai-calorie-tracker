@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth-context";
+import { DevLoginCard } from "@/src/components/DevLoginCard"; // DEV-ONLY: remove before production (see replit.md)
 import { PressableScale } from "@/src/components/PressableScale";
 import { colors, radius, shadows } from "@/src/theme";
 
@@ -82,6 +83,9 @@ export default function Index() {
         <Text style={styles.legal}>
           Signs you in with Google. Estimates are informational guidance.
         </Text>
+
+        {/* DEV-ONLY: temporary test login — remove before production (see replit.md) */}
+        <DevLoginCard />
       </SafeAreaView>
     </View>
   );

@@ -101,6 +101,12 @@ async def require_user(
 
     token = authorization.removeprefix("Bearer ").strip()
 
+    # DEV-ONLY guard: sessions minted by the temporary dev login are never
+    # valid in production deployments, even if the session store is shared.
+    # Remove together with backend/dev_auth.py (see replit.md checklist).
+    if token.startswith("devsess_") and os.getenv("REPLIT_DEPLOYMENT") is not None:
+        raise HTTPException(status_code=401, detail="Session expired")
+
     session = await db.user_sessions.find_one(
         {"session_token": token},
         {"_id": 0},

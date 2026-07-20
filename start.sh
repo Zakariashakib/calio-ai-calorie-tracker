@@ -3,8 +3,10 @@
 set -e
 
 echo "==> Clearing stale ports…"
-fuser -k 8001/tcp 2>/dev/null || true
-fuser -k 8082/tcp 2>/dev/null || true
+# NOTE: fuser does not exist in this environment — use pkill on our exact
+# service commands instead, otherwise zombie servers squat on 8001/8082.
+pkill -9 -f "uvicorn server:app" 2>/dev/null || true
+pkill -9 -f "expo start --web" 2>/dev/null || true
 sleep 1  # let OS release the ports
 
 echo "==> Starting FastAPI backend on :8001…"

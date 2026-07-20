@@ -32,6 +32,7 @@ from ai_service import (
     transcribe_and_parse,
 )
 from auth import exchange_session, require_user
+from dev_auth import dev_auth_router  # DEV-ONLY: remove before production (see replit.md)
 from images import (
     backfill_thumbnails,
     compress_full_image,
@@ -1084,6 +1085,7 @@ async def get_curated_models(_: bool = Depends(verify_admin)):
 
 app.include_router(api_router)
 app.include_router(admin_router)
+app.include_router(dev_auth_router)  # DEV-ONLY: remove before production (see replit.md)
 
 # Serve Admin Panel Static Assets & Route
 admin_panel_dir = ROOT_DIR.parent / "admin-panel"
@@ -1146,6 +1148,14 @@ async def startup():
         "barcode",
         unique=True,
     )
+
+    # DEV-ONLY: in production deployments, purge any dev test user/sessions
+    # left over from the temporary email/password login. Remove together with
+    # backend/dev_auth.py (see replit.md checklist).
+    if os.getenv("REPLIT_DEPLOYMENT") is not None:
+        from dev_auth import purge_dev_artifacts
+
+        await purge_dev_artifacts(db)
 
 
 @app.on_event("shutdown")
