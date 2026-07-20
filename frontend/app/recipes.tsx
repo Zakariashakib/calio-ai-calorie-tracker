@@ -28,6 +28,7 @@ export default function RecipesScreen() {
   const [matched, setMatched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aiMode, setAiMode] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (cat: string, q: string, saved: boolean) => {
@@ -50,14 +51,35 @@ export default function RecipesScreen() {
     }
   }, []);
 
+  // Fetch AI-generated ideas. `refresh` forces a brand-new batch; without
+  // it the backend serves the user's cached batch (24h TTL).
+  const loadAi = useCallback(async (refresh: boolean) => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api<RecipeListResponse>(
+        `/recipes/generate${refresh ? "?refresh=true" : ""}`,
+        { method: "POST" },
+      );
+      setCategories(data.categories);
+      setRecipes(data.recipes.map(mapRecipe));
+      setMatched(data.matched_to_goals);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "Could not generate ideas");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // React to category + debounced search changes.
   useEffect(() => {
+    if (aiMode) return;
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => load(category, query, savedOnly), 250);
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
     };
-  }, [category, query, savedOnly, load]);
+  }, [category, query, savedOnly, load, aiMode]);
 
   // Refetch when returning to the list (e.g. after toggling a save on the
   // recipe detail screen), skipping the initial mount handled above.
@@ -68,8 +90,14 @@ export default function RecipesScreen() {
         firstFocus.current = false;
         return;
       }
-      load(category, query, savedOnly);
-    }, [category, query, savedOnly, load]),
+      if (aiMode) {
+        // Re-fetch the cached AI batch so bookmark toggles made on the
+        // detail screen are reflected (no forced regeneration).
+        loadAi(false);
+      } else {
+        load(category, query, savedOnly);
+      }
+    }, [category, query, savedOnly, load, aiMode, loadAi]),
   );
 
   const toggleSave = useCallback(async (recipe: Recipe) => {
@@ -103,7 +131,10 @@ export default function RecipesScreen() {
           <IconButton icon="chevron-back" onPress={() => router.back()} testID="recipes-back-button" />
           <SearchBar
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(text) => {
+              setQuery(text);
+              setAiMode(false);
+            }}
             placeholder="Search"
             style={styles.search}
             testID="recipes-search-input"
@@ -120,7 +151,10 @@ export default function RecipesScreen() {
           testID="recipe-category-row"
         >
           <PressableScale
-            onPress={() => setSavedOnly((s) => !s)}
+            onPress={() => {
+              setSavedOnly((s) => !s);
+              setAiMode(false);
+            }}
             style={[styles.savedChip, savedOnly && styles.savedChipActive]}
             testID="recipe-filter-saved"
           >
@@ -139,14 +173,64 @@ export default function RecipesScreen() {
               label={cat.id}
               imageUri={cat.image}
               active={category === cat.id}
-              onPress={() => setCategory(cat.id)}
+              onPress={() => {
+                setCategory(cat.id);
+                setAiMode(false);
+              }}
               testID={`recipe-category-${cat.id.toLowerCase()}`}
             />
           ))}
         </ScrollView>
 
+        {/* Fresh AI ideas: enter AI mode / refresh the batch / go back. */}
+        <View style={styles.aiRow}>
+          <PressableScale
+            onPress={() => {
+              if (aiMode) {
+                loadAi(true);
+              } else {
+                setAiMode(true);
+                loadAi(false);
+              }
+            }}
+            disabled={loading}
+            style={[styles.aiButton, aiMode && styles.aiButtonActive]}
+            testID="recipes-ai-ideas-button"
+          >
+            <Ionicons
+              name={aiMode ? "refresh" : "sparkles"}
+              size={16}
+              color={aiMode ? colors.surface : colors.ink}
+            />
+            <Text style={[styles.aiButtonLabel, aiMode && styles.aiButtonLabelActive]}>
+              {aiMode ? "New ideas" : "Fresh AI ideas"}
+            </Text>
+          </PressableScale>
+          {aiMode ? (
+            <PressableScale
+              onPress={() => {
+                setAiMode(false);
+                load(category, query, savedOnly);
+              }}
+              disabled={loading}
+              style={styles.aiBackButton}
+              testID="recipes-ai-back-button"
+            >
+              <Text style={styles.aiBackLabel}>Back to catalog</Text>
+            </PressableScale>
+          ) : null}
+        </View>
+
         <SectionHeader
-          title={savedOnly ? "Saved Recipes" : matched ? "Matched to Your Goals" : "Trending Recipes"}
+          title={
+            aiMode
+              ? "Fresh AI Ideas"
+              : savedOnly
+                ? "Saved Recipes"
+                : matched
+                  ? "Matched to Your Goals"
+                  : "Trending Recipes"
+          }
           badge={recipes.length}
           actionLabel="See All"
         />
@@ -254,6 +338,25 @@ const styles = StyleSheet.create({
     ...shadows.subtle,
   },
   savedChipActive: { borderColor: colors.dark },
+
+  aiRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  aiButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: colors.dark,
+    ...shadows.subtle,
+  },
+  aiButtonActive: { backgroundColor: colors.dark, borderColor: colors.dark },
+  aiButtonLabel: { fontSize: 13, fontWeight: "700", color: colors.ink },
+  aiButtonLabelActive: { color: colors.surface },
+  aiBackButton: { paddingVertical: 10, paddingHorizontal: 8 },
+  aiBackLabel: { fontSize: 13, fontWeight: "600", color: colors.muted },
   savedChipLabel: { fontSize: 11, fontWeight: "600", color: colors.muted },
   savedChipLabelActive: { color: colors.ink, fontWeight: "700" },
 
