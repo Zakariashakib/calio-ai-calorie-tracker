@@ -19,7 +19,7 @@ export function MacroCard({ label, value, goal, unit, color, icon }: { label: st
   );
 }
 
-export function MetricCard({ icon, label, value, accent = colors.green }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; accent?: string }) {
+export function MetricCard({ icon, label, value, accent = colors.peach }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; accent?: string }) {
   return (
     <View style={styles.metric}>
       <Ionicons name={icon} size={19} color={accent} />
@@ -30,7 +30,7 @@ export function MetricCard({ icon, label, value, accent = colors.green }: { icon
 }
 
 const styles = StyleSheet.create({
-  track: { height: 7, borderRadius: 8, backgroundColor: "#ECE9E3", overflow: "hidden" },
+  track: { height: 7, borderRadius: 8, backgroundColor: colors.arcTrack, overflow: "hidden" },
   fill: { height: 7, borderRadius: 8 },
   macroCard: { flex: 1, minWidth: 145, padding: 16, borderRadius: radius.md, backgroundColor: colors.surface, gap: 8, ...shadow },
   icon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },

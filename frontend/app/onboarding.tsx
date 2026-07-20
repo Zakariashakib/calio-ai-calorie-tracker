@@ -459,7 +459,7 @@ function Choice({
         <Ionicons
           name="checkmark-circle"
           size={22}
-          color={colors.greenDark}
+          color={colors.peach}
         />
       ) : null}
     </PressableScale>
@@ -531,12 +531,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
   },
   stepActive: {
-    backgroundColor: colors.green,
+    backgroundColor: colors.peach,
   },
   kicker: {
     fontSize: 11,
     letterSpacing: 1.7,
-    color: colors.greenDark,
+    color: colors.peach,
     fontWeight: "800",
   },
   title: {
@@ -579,8 +579,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   choiceActive: {
-    backgroundColor: colors.greenSoft,
-    borderColor: colors.green,
+    backgroundColor: colors.peachSoft,
+    borderColor: colors.peach,
   },
   choiceText: {
     gap: 4,

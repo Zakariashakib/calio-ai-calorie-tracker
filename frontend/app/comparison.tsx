@@ -197,7 +197,7 @@ export default function ComparisonScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
-              <Ionicons name="git-compare" size={36} color={colors.greenDark} />
+              <Ionicons name="git-compare" size={36} color={colors.peach} />
             </View>
             <Text style={styles.heroTitle}>Plate Comparison</Text>
             <Text style={styles.heroText}>
@@ -217,7 +217,7 @@ export default function ComparisonScreen() {
           </PressableScale>
 
           <PressableScale style={styles.secondary} onPress={() => pickPhoto("before")}>
-            <Ionicons name="images-outline" size={20} color={colors.greenDark} />
+            <Ionicons name="images-outline" size={20} color={colors.ink} />
             <Text style={styles.secondaryText}>Choose from library</Text>
           </PressableScale>
 
@@ -276,7 +276,7 @@ export default function ComparisonScreen() {
           </PressableScale>
 
           <PressableScale style={styles.secondary} onPress={() => pickPhoto("after")}>
-            <Ionicons name="images-outline" size={20} color={colors.greenDark} />
+            <Ionicons name="images-outline" size={20} color={colors.ink} />
             <Text style={styles.secondaryText}>Choose from library</Text>
           </PressableScale>
         </ScrollView>
@@ -302,7 +302,7 @@ export default function ComparisonScreen() {
 
         {analyzing ? (
           <View style={styles.analyzeCenter}>
-            <ActivityIndicator size="large" color={colors.green} />
+            <ActivityIndicator size="large" color={colors.peach} />
             <Text style={styles.analyzeText}>Analyzing consumption…</Text>
           </View>
         ) : result ? (
@@ -392,7 +392,7 @@ export default function ComparisonScreen() {
                   <Ionicons name="remove" size={12} color={colors.muted} />
                   <Text style={styles.breakdownAfter}>{Math.round(result.after.totals[key])}g</Text>
                   <Ionicons name="arrow-forward" size={12} color={colors.muted} />
-                  <Text style={[styles.breakdownConsumed, { color: colors.greenDark }]}>
+                  <Text style={[styles.breakdownConsumed, { color: colors.peach }]}>
                     {Math.round(result.consumed[key])}g
                   </Text>
                 </View>
@@ -482,13 +482,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   header: { height: 66, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  backBtn: { width: 44, height: 44, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
-  confidence: { backgroundColor: colors.greenSoft, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
-  confText: { color: colors.greenDark, fontSize: 12, fontWeight: "800" },
+  backBtn: { width: 44, height: 44, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", ...shadow },
+  confidence: { backgroundColor: colors.peachSoft, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
+  confText: { color: colors.peach, fontSize: 12, fontWeight: "800" },
 
   content: { paddingHorizontal: 20, paddingBottom: 40, gap: 18 },
   hero: { alignItems: "center", gap: 10, paddingVertical: 10 },
-  heroIcon: { width: 80, height: 80, borderRadius: 30, backgroundColor: colors.greenSoft, alignItems: "center", justifyContent: "center" },
+  heroIcon: { width: 80, height: 80, borderRadius: 30, backgroundColor: colors.peachSoft, alignItems: "center", justifyContent: "center" },
   heroTitle: { fontSize: 24, fontWeight: "900", color: colors.ink, textAlign: "center" },
   heroText: { fontSize: 14, lineHeight: 21, color: colors.muted, textAlign: "center", maxWidth: 320 },
 
@@ -497,8 +497,8 @@ const styles = StyleSheet.create({
 
   primary: { height: 56, borderRadius: radius.pill, backgroundColor: colors.dark, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   primaryText: { color: "white", fontSize: 16, fontWeight: "800" },
-  secondary: { height: 52, borderRadius: radius.pill, backgroundColor: colors.greenSoft, borderWidth: 1.5, borderColor: colors.green, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  secondaryText: { color: colors.greenDark, fontSize: 15, fontWeight: "700" },
+  secondary: { height: 52, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  secondaryText: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   disclaimer: { textAlign: "center", color: colors.muted, fontSize: 11 },
 
   previewRow: { flexDirection: "row", gap: 14 },

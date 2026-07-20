@@ -130,7 +130,7 @@ export function MetricCard({
   icon,
   label,
   value,
-  accent = colors.green,
+  accent = colors.peach,
 }: MetricCardProps) {
   return (
     <View style={styles.metric}>
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   track: {
     height: 7,
     borderRadius: 8,
-    backgroundColor: "#ECE9E3",
+    backgroundColor: colors.arcTrack,
     overflow: "hidden",
   },
   fill: {

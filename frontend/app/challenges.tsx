@@ -155,7 +155,7 @@ export default function ChallengesScreen() {
         {/* Challenge cards */}
         {loading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color={colors.green} />
+            <ActivityIndicator color={colors.peach} />
           </View>
         ) : (
           CHALLENGE_IDS.map((id) => {
@@ -264,7 +264,7 @@ export default function ChallengesScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 64 },
-  back: { width: 44, height: 44, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  back: { width: 44, height: 44, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", ...shadow },
   headerTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
   badgeCounter: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.peachSoft, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
   badgeCounterText: { color: colors.peach, fontWeight: "900", fontSize: 13 },
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   joinText: { color: "white", fontSize: 12, fontWeight: "800" },
 
   progressSection: { gap: 9 },
-  progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.canvas, overflow: "hidden" },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.arcTrack, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 4 },
   progressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   streakPill: { flexDirection: "row", alignItems: "center", gap: 4 },
