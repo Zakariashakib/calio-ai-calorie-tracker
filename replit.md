@@ -42,6 +42,16 @@ bash /home/runner/workspace/start.sh
 | `EMERGENT_LLM_KEY` | `backend/.env` | AI vision + voice (Gemini/Whisper via Emergent) |
 | `SESSION_SECRET` | Replit Secrets | Session signing |
 
+### Enabling Real AI Analysis
+Without an AI key the app runs in **offline / degraded mode**: scan and voice endpoints return placeholder responses with a clear warning instead of crashing. To enable live AI nutrition analysis, add **one** of these in Replit Secrets (or `backend/.env`):
+
+| Secret | Provider | How to obtain |
+|---|---|---|
+| `GEMINI_API_KEY` | Google Gemini 2.5 Flash | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — free tier available |
+| `OPENROUTER_API_KEY` | OpenRouter (multiple models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+After adding the key, restart the workflow — no code changes needed.
+
 ## P1 Features Implemented (July 2026)
 - **Before/After Comparison Screen** (`app/comparison.tsx`): Two-step photo flow with differential nutrition calculation via `POST /api/scan/compare`
 - **Automatic Challenge Progress** (`nutrition.py` + `server.py`): Streak and badge state recomputed on every meal/water save; `GET /challenges` returns live `ChallengeStatus` with `progress`, `goal`, `streak`, `badge_earned`

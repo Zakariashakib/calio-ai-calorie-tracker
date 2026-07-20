@@ -377,10 +377,56 @@ async def test_ai_prompt(prompt: str, provider: Optional[str] = None, model: Opt
         )
 
 
+def _has_any_key(config: AIConfigSchema) -> bool:
+    """Return True if at least one usable API key is present."""
+    return bool(
+        config.gemini_api_key
+        or config.openrouter_api_key
+        or os.getenv("GEMINI_API_KEY")
+        or os.getenv("EMERGENT_LLM_KEY")
+        or os.getenv("OPENROUTER_API_KEY")
+    )
+
+
+def _no_ai_scan_response(mode: str) -> ScanResponse:
+    """Placeholder ScanResponse returned when no AI key is configured."""
+    placeholder = MealItem(
+        name="Unknown food (AI not configured)",
+        estimated_weight_g=0,
+        portion="—",
+        calories=0,
+        protein_g=0,
+        carbs_g=0,
+        fat_g=0,
+        fiber_g=0,
+        sugar_g=0,
+        sodium_mg=0,
+        confidence=0.0,
+    )
+    return ScanResponse(
+        scan_id=f"scan_noai_{uuid4().hex[:8]}",
+        meal_name="AI not configured",
+        total_weight_g=0,
+        foods=[placeholder],
+        totals=Nutrients(),
+        confidence=0.0,
+        warnings=[
+            "AI analysis is disabled — no API key is configured. "
+            "Add GEMINI_API_KEY or OPENROUTER_API_KEY in Replit Secrets to enable real nutrition estimates."
+        ],
+        guidance="Review and edit the food items manually before saving.",
+    )
+
+
 async def analyze_food(
     image_base64: str,
     mode: str,
 ) -> ScanResponse:
+    config = await get_active_ai_config()
+    if not _has_any_key(config):
+        logger.warning("analyze_food called but no AI key is configured — returning placeholder")
+        return _no_ai_scan_response(mode)
+
     mode_hint = {
         "meal": "Identify every visible food separately.",
         "restaurant": "Treat this as a restaurant dish; account for likely oil, sauces, and hidden ingredients.",
@@ -469,6 +515,32 @@ async def transcribe_and_parse(
         )
 
     config = await get_active_ai_config()
+
+    if not _has_any_key(config):
+        logger.warning("transcribe_and_parse called but no AI key is configured — returning placeholder")
+        placeholder = MealItem(
+            name="Unknown food (AI not configured)",
+            estimated_weight_g=0,
+            portion="—",
+            calories=0,
+            protein_g=0,
+            carbs_g=0,
+            fat_g=0,
+            fiber_g=0,
+            sugar_g=0,
+            sodium_mg=0,
+            confidence=0.0,
+        )
+        return {
+            "title": "AI not configured",
+            "meal_type": "Snack",
+            "transcript": "AI not configured",
+            "items": [placeholder.model_dump()],
+            "warnings": [
+                "Voice analysis is disabled — no API key is configured. "
+                "Add GEMINI_API_KEY or OPENROUTER_API_KEY in Replit Secrets to enable real voice logging."
+            ],
+        }
     transcript = None
 
     # If Gemini is active or API key set, try Gemini native multimodal audio transcription

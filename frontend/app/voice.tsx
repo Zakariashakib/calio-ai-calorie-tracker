@@ -13,7 +13,7 @@ import { scanStore } from "@/src/scan-store";
 import { colors, radius } from "@/src/theme";
 import type { MealItem } from "@/src/types";
 
-type VoiceResult = { title: string; meal_type: "Breakfast" | "Lunch" | "Dinner" | "Snack"; transcript: string; items: MealItem[] };
+type VoiceResult = { title: string; meal_type: "Breakfast" | "Lunch" | "Dinner" | "Snack"; transcript: string; items: MealItem[]; warnings?: string[] };
 
 export default function VoiceScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -34,7 +34,7 @@ export default function VoiceScreen() {
       form.append("file", { uri: recorder.uri, name: "meal.m4a", type: "audio/m4a" } as unknown as Blob);
       const result = await api<VoiceResult>("/voice/parse", { method: "POST", body: form });
       const totals = result.items.reduce((sum, item) => ({ calories: sum.calories + item.calories, protein_g: sum.protein_g + item.protein_g, carbs_g: sum.carbs_g + item.carbs_g, fat_g: sum.fat_g + item.fat_g, fiber_g: sum.fiber_g + item.fiber_g, sugar_g: sum.sugar_g + item.sugar_g, sodium_mg: sum.sodium_mg + item.sodium_mg }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sodium_mg: 0 });
-      scanStore.set({ scan_id: "voice", meal_name: result.title, total_weight_g: result.items.reduce((s, x) => s + x.estimated_weight_g, 0), foods: result.items, totals, confidence: Math.min(...result.items.map((x) => x.confidence)), warnings: [], guidance: `Transcript: “${result.transcript}” Review the foods before saving.` });
+      scanStore.set({ scan_id: "voice", meal_name: result.title, total_weight_g: result.items.reduce((s, x) => s + x.estimated_weight_g, 0), foods: result.items, totals, confidence: Math.min(...result.items.map((x) => x.confidence)), warnings: result.warnings ?? [], guidance: `Transcript: "${result.transcript}" Review the foods before saving.` });
       router.replace("/scan-result");
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Voice logging failed"); }
     finally { setProcessing(false); }
