@@ -408,6 +408,12 @@ async def update_meal(
     if not doc.get("image_base64") and doc.get("image_key"):
         doc["image_base64"] = await download_image_base64(doc["image_key"])
 
+    # Auto-refresh challenge progress whenever a meal is edited
+    try:
+        await refresh_all_challenges(db, user.user_id)
+    except Exception:
+        pass  # Never fail the meal update due to challenge errors
+
     return MealResponse(**doc)
 
 
