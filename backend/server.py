@@ -629,6 +629,47 @@ async def _user_saved_recipe_ids(user_id: str) -> set:
     return set(doc.get("recipe_ids", [])) if doc else set()
 
 
+async def _get_saved_recipes(user_id: str) -> List[dict]:
+    """AI-generated recipes the user bookmarked, preserved across batches."""
+    doc = await db.saved_recipes.find_one(
+        {"user_id": user_id}, {"_id": 0, "recipes": 1}
+    )
+    return list(doc.get("recipes", [])) if doc else []
+
+
+async def _save_recipe_copy(user_id: str, recipe: dict) -> None:
+    """Store a copy of an AI-generated recipe so it survives batch refresh."""
+    await db.saved_recipes.update_one(
+        {"user_id": user_id},
+        {"$pull": {"recipes": {"id": recipe["id"]}}},
+        upsert=True,
+    )
+    await db.saved_recipes.update_one(
+        {"user_id": user_id},
+        {"$push": {"recipes": recipe}},
+    )
+
+
+async def _remove_saved_recipe_copy(user_id: str, recipe_id: str) -> None:
+    await db.saved_recipes.update_one(
+        {"user_id": user_id},
+        {"$pull": {"recipes": {"id": recipe_id}}},
+    )
+
+
+async def _preserve_bookmarked_generated(user_id: str, old_doc: Optional[dict]) -> None:
+    """Copy bookmarked recipes from an outgoing generated batch into
+    saved_recipes so bookmarks keep resolving after the batch is replaced."""
+    if not old_doc:
+        return
+    saved_ids = await _user_saved_recipe_ids(user_id)
+    if not saved_ids:
+        return
+    for recipe in old_doc.get("recipes", []):
+        if recipe.get("id") in saved_ids:
+            await _save_recipe_copy(user_id, recipe)
+
+
 def _rank_recipes_for_goals(profile: Optional[dict]) -> List[dict]:
     """Order recipes so those closest to the user's per-meal calorie/macro
     targets come first. Falls back to the raw list when no profile exists."""
@@ -676,6 +717,12 @@ async def list_recipes(
 
     if saved_only:
         ranked = [r for r in ranked if r["id"] in saved_ids]
+        # Include bookmarked AI-generated recipes (preserved copies).
+        catalog_ids = {r["id"] for r in ranked}
+        ranked += [
+            r for r in await _get_saved_recipes(user.user_id)
+            if r["id"] in saved_ids and r["id"] not in catalog_ids
+        ]
     if category and category != "All":
         ranked = [r for r in ranked if r["category"] == category]
     if q:
@@ -779,6 +826,10 @@ async def generate_fresh_recipes(
             matched_to_goals=matched,
         )
 
+    # Preserve any bookmarked recipes from the outgoing batch before
+    # replacing it, so bookmarks keep resolving.
+    await _preserve_bookmarked_generated(user.user_id, cached)
+
     await db.generated_recipes.update_one(
         {"user_id": user.user_id},
         {
@@ -806,11 +857,14 @@ async def _find_recipe(user_id: str, recipe_id: str) -> Optional[dict]:
         return recipe
     doc = await _get_generated_recipes_doc(user_id)
     if doc:
-        return next(
+        recipe = next(
             (r for r in doc.get("recipes", []) if r["id"] == recipe_id),
             None,
         )
-    return None
+        if recipe:
+            return recipe
+    saved = await _get_saved_recipes(user_id)
+    return next((r for r in saved if r["id"] == recipe_id), None)
 
 
 @api_router.get("/recipes/{recipe_id}", response_model=RecipeDetail)
@@ -831,7 +885,8 @@ async def toggle_recipe_bookmark(
     payload: BookmarkInput,
     user: UserPublic = Depends(require_user),
 ):
-    if not await _find_recipe(user.user_id, payload.recipe_id):
+    recipe = await _find_recipe(user.user_id, payload.recipe_id)
+    if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     op = "$addToSet" if payload.saved else "$pull"
@@ -840,6 +895,16 @@ async def toggle_recipe_bookmark(
         {op: {"recipe_ids": payload.recipe_id}},
         upsert=True,
     )
+
+    # AI-generated recipes (not in the curated catalog) must be copied so
+    # they survive when a new generated batch replaces the old one.
+    is_catalog = any(r["id"] == payload.recipe_id for r in RECIPES)
+    if not is_catalog:
+        if payload.saved:
+            await _save_recipe_copy(user.user_id, recipe)
+        else:
+            await _remove_saved_recipe_copy(user.user_id, payload.recipe_id)
+
     return {"recipe_id": payload.recipe_id, "saved": payload.saved}
 
 
