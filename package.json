@@ -1,0 +1,18 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "> **Point your camera at any meal and get instant nutritional breakdowns, macro analysis, and custom AI coaching in under 2 seconds.**",
+  "main": "guard.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "http-proxy": "^1.18.1"
+  }
+}

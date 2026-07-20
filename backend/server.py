@@ -41,11 +41,15 @@ from models import (
     AuthSessionRequest,
     BarcodeResponse,
     ChallengeInput,
+    ChallengeStatus,
     ChatInput,
+    CompareScanRequest,
+    CompareResult,
     FastingInput,
     MealCreate,
     MealItem,
     MealResponse,
+    Nutrients,
     ProfileInput,
     ProfileResponse,
     ScanRequest,
@@ -58,8 +62,10 @@ from models import (
 from nutrition import (
     build_dashboard,
     build_weekly_report,
+    calculate_challenge_progress,
     calculate_goals,
     iso_day,
+    refresh_all_challenges,
     sum_nutrients,
 )
 
@@ -254,6 +260,12 @@ async def create_meal(
     await db.meals.insert_one(doc.copy())
     doc.pop("_id", None)
 
+    # Auto-refresh challenge progress whenever a meal is logged
+    try:
+        await refresh_all_challenges(db, user.user_id)
+    except Exception:
+        pass  # Never fail the meal save due to challenge errors
+
     return MealResponse(**doc)
 
 
@@ -355,6 +367,12 @@ async def add_water(
     await db.water_logs.insert_one(doc.copy())
     doc.pop("_id", None)
 
+    # Auto-refresh challenge progress whenever water is logged
+    try:
+        await refresh_all_challenges(db, user.user_id)
+    except Exception:
+        pass
+
     return doc
 
 
@@ -441,12 +459,19 @@ async def join_challenge(
     payload: ChallengeInput,
     user: UserPublic = Depends(require_user),
 ):
+    from nutrition import CHALLENGE_DEFS
+    defn = CHALLENGE_DEFS.get(payload.challenge_id, {})
+    goal = defn.get("goal", 7)
+
     doc = {
         "user_id": user.user_id,
         "challenge_id": payload.challenge_id,
         "joined_at": now_iso(),
         "progress": 0,
+        "goal": goal,
         "streak": 0,
+        "badge_earned": False,
+        "completed_at": None,
     }
 
     await db.challenges.update_one(
@@ -458,23 +483,73 @@ async def join_challenge(
         upsert=True,
     )
 
-    return await db.challenges.find_one(
-        {
-            "user_id": user.user_id,
-            "challenge_id": payload.challenge_id,
-        },
-        {"_id": 0},
+    # Compute real progress immediately after joining
+    status = await calculate_challenge_progress(
+        db, user.user_id, payload.challenge_id
     )
+    return status.model_dump() if status else doc
 
 
 @api_router.get("/challenges")
-async def challenges(
+async def get_challenges(
     user: UserPublic = Depends(require_user),
 ):
-    return await db.challenges.find(
+    """Return all joined challenges with up-to-date progress."""
+    joined = await db.challenges.find(
         {"user_id": user.user_id},
-        {"_id": 0},
+        {"_id": 0, "challenge_id": 1},
     ).to_list(20)
+
+    results = []
+    for entry in joined:
+        status = await calculate_challenge_progress(
+            db, user.user_id, entry["challenge_id"]
+        )
+        if status:
+            results.append(status.model_dump())
+
+    return results
+
+
+@api_router.post(
+    "/scan/compare",
+)
+async def compare_scans(
+    payload: CompareScanRequest,
+    user: UserPublic = Depends(require_user),
+):
+    """Analyze before and after plate photos and return consumed nutrients."""
+    before = await analyze_food(payload.before_image_base64, "before")
+    after = await analyze_food(payload.after_image_base64, "after")
+
+    def diff(a: float, b: float) -> float:
+        return round(max(0.0, a - b), 1)
+
+    consumed = Nutrients(
+        calories=diff(before.totals.calories, after.totals.calories),
+        protein_g=diff(before.totals.protein_g, after.totals.protein_g),
+        carbs_g=diff(before.totals.carbs_g, after.totals.carbs_g),
+        fat_g=diff(before.totals.fat_g, after.totals.fat_g),
+        fiber_g=diff(before.totals.fiber_g, after.totals.fiber_g),
+        sugar_g=diff(before.totals.sugar_g, after.totals.sugar_g),
+        sodium_mg=diff(before.totals.sodium_mg, after.totals.sodium_mg),
+    )
+
+    consumed_weight = max(0.0, before.total_weight_g - after.total_weight_g)
+    avg_confidence = round((before.confidence + after.confidence) / 2, 2)
+
+    return {
+        "before": before.model_dump(),
+        "after": after.model_dump(),
+        "consumed": consumed.model_dump(),
+        "consumed_weight_g": consumed_weight,
+        "confidence": avg_confidence,
+        "guidance": (
+            f"You consumed approximately {round(consumed.calories)} kcal "
+            f"({round(consumed_weight)} g) from this meal. "
+            "Review the breakdown and save what you actually ate."
+        ),
+    }
 
 
 @api_router.get(

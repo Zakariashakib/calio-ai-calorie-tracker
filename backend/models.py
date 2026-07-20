@@ -160,6 +160,35 @@ class ChallengeInput(BaseModel):
     ]
 
 
+class ChallengeStatus(BaseModel):
+    challenge_id: str
+    joined_at: str
+    progress: int           # days completed toward goal
+    goal: int               # total days required
+    streak: int             # current consecutive-day streak
+    badge_earned: bool      # True once goal is reached
+    completed_at: Optional[str] = None
+
+
+class CompareScanRequest(BaseModel):
+    before_image_base64: str = Field(min_length=100)
+    after_image_base64: str = Field(min_length=100)
+    mime_type: Literal[
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    ] = "image/jpeg"
+
+
+class CompareResult(BaseModel):
+    before: ScanResponse
+    after: ScanResponse
+    consumed: "Nutrients"
+    consumed_weight_g: float
+    confidence: float
+    guidance: str
+
+
 class BarcodeResponse(BaseModel):
     barcode: str
     product_name: str

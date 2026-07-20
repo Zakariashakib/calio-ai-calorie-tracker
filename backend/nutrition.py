@@ -1,7 +1,108 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from models import Goals, Nutrients, ProfileInput
+from models import ChallengeStatus, Goals, Nutrients, ProfileInput
+
+# Challenge definitions: id → (goal_days, collection, field_for_presence)
+CHALLENGE_DEFS = {
+    "healthy-7":     {"goal": 7,  "kind": "meals"},
+    "weight-loss-30": {"goal": 30, "kind": "meals"},
+    "water-14":      {"goal": 14, "kind": "water"},
+}
+
+
+async def calculate_challenge_progress(
+    db,
+    user_id: str,
+    challenge_id: str,
+) -> Optional[ChallengeStatus]:
+    """Recompute streak/progress/badge for one challenge and persist to DB."""
+    doc = await db.challenges.find_one(
+        {"user_id": user_id, "challenge_id": challenge_id},
+        {"_id": 0},
+    )
+    if not doc:
+        return None
+
+    defn = CHALLENGE_DEFS.get(challenge_id)
+    if not defn:
+        return None
+
+    goal_days: int = defn["goal"]
+    kind: str = defn["kind"]
+    today = datetime.now(timezone.utc).date()
+
+    # Collect the last goal_days days
+    window = [
+        (today - timedelta(days=i)).isoformat()
+        for i in range(goal_days - 1, -1, -1)
+    ]
+
+    if kind == "meals":
+        records = await db.meals.find(
+            {"user_id": user_id, "day": {"$in": window}},
+            {"_id": 0, "day": 1},
+        ).to_list(500)
+        logged_days = {r["day"] for r in records}
+    else:  # water
+        records = await db.water_logs.find(
+            {"user_id": user_id, "day": {"$in": window}},
+            {"_id": 0, "day": 1},
+        ).to_list(500)
+        logged_days = {r["day"] for r in records}
+
+    # Progress = distinct days logged inside the window
+    progress = len(logged_days)
+
+    # Streak = longest consecutive tail ending today
+    streak = 0
+    for i in range(goal_days):
+        check = (today - timedelta(days=i)).isoformat()
+        if check in logged_days:
+            streak += 1
+        else:
+            break
+
+    badge_earned = progress >= goal_days
+    completed_at = doc.get("completed_at")
+    if badge_earned and not completed_at:
+        from models import now_iso
+        completed_at = now_iso()
+
+    updates = {
+        "progress": progress,
+        "streak": streak,
+        "badge_earned": badge_earned,
+        "completed_at": completed_at,
+    }
+
+    await db.challenges.update_one(
+        {"user_id": user_id, "challenge_id": challenge_id},
+        {"$set": updates},
+    )
+
+    return ChallengeStatus(
+        challenge_id=challenge_id,
+        joined_at=doc["joined_at"],
+        progress=progress,
+        goal=goal_days,
+        streak=streak,
+        badge_earned=badge_earned,
+        completed_at=completed_at,
+    )
+
+
+async def refresh_all_challenges(db, user_id: str) -> None:
+    """Refresh progress for every challenge the user has joined."""
+    joined = await db.challenges.find(
+        {"user_id": user_id},
+        {"_id": 0, "challenge_id": 1},
+    ).to_list(20)
+    for entry in joined:
+        await calculate_challenge_progress(
+            db, user_id, entry["challenge_id"]
+        )
 
 
 ACTIVITY = {

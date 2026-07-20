@@ -83,3 +83,22 @@ export type Report = {
   weight_change_kg: number;
   consistency_percent: number;
 };
+
+export type ChallengeStatus = {
+  challenge_id: string;
+  joined_at: string;
+  progress: number;
+  goal: number;
+  streak: number;
+  badge_earned: boolean;
+  completed_at?: string | null;
+};
+
+export type CompareResponse = {
+  before: ScanResult;
+  after: ScanResult;
+  consumed: Nutrients;
+  consumed_weight_g: number;
+  confidence: number;
+  guidance: string;
+};
