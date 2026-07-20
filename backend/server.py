@@ -31,7 +31,12 @@ from ai_service import (
     transcribe_and_parse,
 )
 from auth import exchange_session, require_user
-from images import backfill_thumbnails, make_thumbnail
+from images import (
+    backfill_thumbnails,
+    compress_full_image,
+    make_thumbnail,
+    recompress_old_images,
+)
 from models import (
     AIConfigPublic,
     AIConfigSchema,
@@ -258,6 +263,8 @@ async def create_meal(
 
     doc = {
         **payload.model_dump(),
+        "image_base64": compress_full_image(payload.image_base64),
+        "image_optimized": True,
         "thumbnail_base64": make_thumbnail(payload.image_base64),
         "meal_id": f"meal_{os.urandom(6).hex()}",
         "user_id": user.user_id,
@@ -326,6 +333,8 @@ async def update_meal(
     }
 
     if payload.image_base64:
+        updates["image_base64"] = compress_full_image(payload.image_base64)
+        updates["image_optimized"] = True
         updates["thumbnail_base64"] = make_thumbnail(payload.image_base64)
 
     result = await db.meals.update_one(
@@ -390,6 +399,9 @@ async def food_history(
 
     # Older meals may predate thumbnails; generate them once, lazily.
     await backfill_thumbnails(db, user.user_id, meals)
+
+    # Older meals may store huge full-res photos; shrink them once, lazily.
+    await recompress_old_images(db, user.user_id, meals)
 
     return meals
 
