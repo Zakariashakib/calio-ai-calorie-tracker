@@ -21,6 +21,7 @@ import { colors, radius, shadows } from "@/src/theme";
 
 export default function RecipesScreen() {
   const [category, setCategory] = useState("All");
+  const [savedOnly, setSavedOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<RecipeCategory[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -29,13 +30,14 @@ export default function RecipesScreen() {
   const [error, setError] = useState("");
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async (cat: string, q: string) => {
+  const load = useCallback(async (cat: string, q: string, saved: boolean) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (cat && cat !== "All") params.set("category", cat);
       if (q.trim()) params.set("q", q.trim());
+      if (saved) params.set("saved_only", "true");
       const suffix = params.toString() ? `?${params.toString()}` : "";
       const data = await api<RecipeListResponse>(`/recipes${suffix}`);
       setCategories(data.categories);
@@ -51,11 +53,11 @@ export default function RecipesScreen() {
   // React to category + debounced search changes.
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => load(category, query), 250);
+    debounce.current = setTimeout(() => load(category, query, savedOnly), 250);
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
     };
-  }, [category, query, load]);
+  }, [category, query, savedOnly, load]);
 
   const toggleSave = useCallback(async (recipe: Recipe) => {
     const next = !recipe.saved;
@@ -67,13 +69,19 @@ export default function RecipesScreen() {
         method: "POST",
         body: JSON.stringify({ recipe_id: recipe.id, saved: next }),
       });
+      // In the Saved view, unsaving a recipe removes it from the list.
+      if (!next) {
+        setRecipes((list) =>
+          savedOnly ? list.filter((r) => r.id !== recipe.id) : list,
+        );
+      }
     } catch {
       // Revert on failure so the star reflects real persisted state.
       setRecipes((list) =>
         list.map((r) => (r.id === recipe.id ? { ...r, saved: !next } : r)),
       );
     }
-  }, []);
+  }, [savedOnly]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -98,6 +106,20 @@ export default function RecipesScreen() {
           contentContainerStyle={styles.chips}
           testID="recipe-category-row"
         >
+          <PressableScale
+            onPress={() => setSavedOnly((s) => !s)}
+            style={[styles.savedChip, savedOnly && styles.savedChipActive]}
+            testID="recipe-filter-saved"
+          >
+            <Ionicons
+              name={savedOnly ? "star" : "star-outline"}
+              size={22}
+              color={savedOnly ? colors.yellow : colors.muted}
+            />
+            <Text style={[styles.savedChipLabel, savedOnly && styles.savedChipLabelActive]}>
+              Saved
+            </Text>
+          </PressableScale>
           {categories.map((cat) => (
             <CategoryChip
               key={cat.id}
@@ -111,7 +133,7 @@ export default function RecipesScreen() {
         </ScrollView>
 
         <SectionHeader
-          title={matched ? "Matched to Your Goals" : "Trending Recipes"}
+          title={savedOnly ? "Saved Recipes" : matched ? "Matched to Your Goals" : "Trending Recipes"}
           badge={recipes.length}
           actionLabel="See All"
         />
@@ -139,7 +161,11 @@ export default function RecipesScreen() {
         {!loading && !error && recipes.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="search-outline" size={28} color={colors.peach} />
-            <Text style={styles.emptyText}>No recipes match your search.</Text>
+            <Text style={styles.emptyText}>
+              {savedOnly
+                ? "No saved recipes yet. Tap the star on a recipe to save it."
+                : "No recipes match your search."}
+            </Text>
           </View>
         ) : null}
       </ScrollView>
@@ -201,6 +227,22 @@ const styles = StyleSheet.create({
 
   chipScroller: { marginHorizontal: -20, flexGrow: 0 },
   chips: { paddingHorizontal: 20, gap: 10 },
+
+  savedChip: {
+    width: 72,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    ...shadows.subtle,
+  },
+  savedChipActive: { borderColor: colors.dark },
+  savedChipLabel: { fontSize: 11, fontWeight: "600", color: colors.muted },
+  savedChipLabelActive: { color: colors.ink, fontWeight: "700" },
 
   card: {
     backgroundColor: colors.surface,

@@ -607,6 +607,7 @@ def _rank_recipes_for_goals(profile: Optional[dict]) -> List[dict]:
 async def list_recipes(
     category: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
+    saved_only: bool = Query(default=False),
     user: UserPublic = Depends(require_user),
 ):
     profile = await db.profiles.find_one(
@@ -616,6 +617,8 @@ async def list_recipes(
 
     ranked = _rank_recipes_for_goals(profile)
 
+    if saved_only:
+        ranked = [r for r in ranked if r["id"] in saved_ids]
     if category and category != "All":
         ranked = [r for r in ranked if r["category"] == category]
     if q:
