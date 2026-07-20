@@ -278,6 +278,31 @@ async def create_meal(
     return MealResponse(**doc)
 
 
+@api_router.get(
+    "/meals/{meal_id}",
+    response_model=MealResponse,
+)
+async def get_meal(
+    meal_id: str,
+    user: UserPublic = Depends(require_user),
+):
+    doc = await db.meals.find_one(
+        {
+            "meal_id": meal_id,
+            "user_id": user.user_id,
+        },
+        {"_id": 0},
+    )
+
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail="Meal not found",
+        )
+
+    return MealResponse(**doc)
+
+
 @api_router.put(
     "/meals/{meal_id}",
     response_model=MealResponse,
