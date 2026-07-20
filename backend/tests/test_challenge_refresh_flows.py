@@ -72,6 +72,18 @@ def _meal_payload(title: str) -> dict:
     }
 
 
+def _healthy7(client, hdrs) -> dict:
+    """Fetch the current healthy-7 challenge status via the API."""
+    challenges = client.get("/api/challenges", headers=hdrs)
+    assert challenges.status_code == 200, challenges.text
+    entry = next(
+        (c for c in challenges.json() if c["challenge_id"] == "healthy-7"),
+        None,
+    )
+    assert entry is not None, "healthy-7 missing from challenge list"
+    return entry
+
+
 def _make_wav_bytes() -> bytes:
     """Return a minimal valid WAV file (1 second of silence at 16 kHz mono)."""
     buf = io.BytesIO()
@@ -355,3 +367,118 @@ class TestChallengeRefreshFlows:
         # Cleanup
         client.delete(f"/api/meals/{meal_id}", headers=hdrs)
         client.delete(f"/api/meals/{meal_id2}", headers=hdrs)
+
+    # 4. DELETE /meals/{id} → GET /challenges ─────────────────────────────────
+
+    def test_delete_only_meal_resets_challenge_progress(self, client):
+        """Deleting the only meal of the day must drop progress and streak to 0."""
+        hdrs = _authed_headers()
+
+        join = client.post(
+            "/api/challenges", json={"challenge_id": "healthy-7"}, headers=hdrs
+        )
+        assert join.status_code == 200, join.text
+
+        save = client.post(
+            "/api/meals", json=_meal_payload("test_delete_streak"), headers=hdrs
+        )
+        assert save.status_code == 200, save.text
+        meal_id = save.json()["meal_id"]
+
+        # Sanity: today counts while the meal exists.
+        before = _healthy7(client, hdrs)
+        assert before["progress"] >= 1, before
+        assert before["streak"] >= 1, before
+
+        # Delete the ONLY meal logged today.
+        deleted = client.delete(f"/api/meals/{meal_id}", headers=hdrs)
+        assert deleted.status_code == 200, deleted.text
+
+        after = _healthy7(client, hdrs)
+        assert after["progress"] == 0, (
+            f"progress must drop to 0 after deleting the only meal, got {after['progress']}"
+        )
+        assert after["streak"] == 0, (
+            f"streak must drop to 0 after deleting the only meal, got {after['streak']}"
+        )
+
+    # 5. PUT /meals/{id} moving the meal off today → GET /challenges ──────────
+
+    def test_update_meal_day_change_refreshes_challenge(self, client):
+        """Editing a meal onto another day must recompute progress and break the streak."""
+        hdrs = _authed_headers()
+
+        join = client.post(
+            "/api/challenges", json={"challenge_id": "healthy-7"}, headers=hdrs
+        )
+        assert join.status_code == 200, join.text
+
+        save = client.post(
+            "/api/meals", json=_meal_payload("test_update_streak"), headers=hdrs
+        )
+        assert save.status_code == 200, save.text
+        meal_id = save.json()["meal_id"]
+
+        assert _healthy7(client, hdrs)["streak"] >= 1
+
+        # Move the meal to yesterday: today becomes empty.
+        yesterday = (
+            datetime.now(timezone.utc) - timedelta(days=1)
+        ).isoformat()
+        update = client.put(
+            f"/api/meals/{meal_id}",
+            json={
+                "meal_type": "Lunch",
+                "title": "test_update_streak_moved",
+                "eaten_at": yesterday,
+                "source": "manual",
+                "items": [MEAL_ITEM],
+            },
+            headers=hdrs,
+        )
+        assert update.status_code == 200, update.text
+
+        after = _healthy7(client, hdrs)
+        # Yesterday still counts as a logged day inside the 7-day window…
+        assert after["progress"] == 1, (
+            f"progress should count the moved day, got {after['progress']}"
+        )
+        # …but the consecutive streak ending today is broken.
+        assert after["streak"] == 0, (
+            f"streak must break when the only meal moves off today, got {after['streak']}"
+        )
+
+        # Cleanup
+        client.delete(f"/api/meals/{meal_id}", headers=hdrs)
+
+    # 6. Guard: delete/update still succeed when the refresh itself fails ─────
+
+    def test_delete_and_update_succeed_even_if_refresh_fails(self, client):
+        """The try/except guard must protect deletes and edits like it does saves."""
+        hdrs = _authed_headers()
+
+        save = client.post(
+            "/api/meals", json=_meal_payload("test_guarded_refresh"), headers=hdrs
+        )
+        assert save.status_code == 200, save.text
+        meal_id = save.json()["meal_id"]
+
+        async def failing_refresh(db, user_id):
+            raise RuntimeError("Simulated challenge DB failure")
+
+        with patch("server.refresh_all_challenges", new=failing_refresh):
+            update = client.put(
+                f"/api/meals/{meal_id}",
+                json=_meal_payload("test_guarded_refresh_edit"),
+                headers=hdrs,
+            )
+            assert update.status_code == 200, (
+                f"Edit must succeed even when challenge refresh throws "
+                f"(got {update.status_code}: {update.text[:200]})"
+            )
+
+            deleted = client.delete(f"/api/meals/{meal_id}", headers=hdrs)
+            assert deleted.status_code == 200, (
+                f"Delete must succeed even when challenge refresh throws "
+                f"(got {deleted.status_code}: {deleted.text[:200]})"
+            )

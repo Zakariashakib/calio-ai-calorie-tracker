@@ -393,6 +393,13 @@ async def update_meal(
             detail="Meal not found",
         )
 
+    # Edits can move a meal to a different day; recompute challenge
+    # progress so streaks reflect the new day layout.
+    try:
+        await refresh_all_challenges(db, user.user_id)
+    except Exception:
+        pass  # Never fail the edit due to challenge errors
+
     doc = await db.meals.find_one(
         {"meal_id": meal_id},
         {"_id": 0},
@@ -432,6 +439,13 @@ async def delete_meal(
             status_code=404,
             detail="Meal not found",
         )
+
+    # Deleting a meal can un-complete a day; recompute challenge progress
+    # so streaks never keep stale (inflated) values.
+    try:
+        await refresh_all_challenges(db, user.user_id)
+    except Exception:
+        pass  # Never fail the delete due to challenge errors
 
     return {"ok": True}
 
