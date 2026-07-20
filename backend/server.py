@@ -37,7 +37,13 @@ from images import (
     backfill_thumbnails,
     compress_full_image,
     make_thumbnail,
-    recompress_old_images,
+)
+from storage import (
+    delete_image,
+    download_image_base64,
+    meal_image_key,
+    migrate_images_to_storage,
+    upload_image_base64,
 )
 from models import (
     AIConfigPublic,
@@ -263,20 +269,37 @@ async def create_meal(
         ]
     )
 
+    meal_id = f"meal_{os.urandom(6).hex()}"
     doc = {
         **payload.model_dump(),
-        "image_base64": compress_full_image(payload.image_base64),
+        "image_base64": None,
         "image_optimized": True,
+        "image_migrated": True,
         "thumbnail_base64": make_thumbnail(payload.image_base64),
-        "meal_id": f"meal_{os.urandom(6).hex()}",
+        "meal_id": meal_id,
         "user_id": user.user_id,
         "day": iso_day(payload.eaten_at),
         "totals": totals.model_dump(),
         "created_at": now_iso(),
     }
 
+    if payload.image_base64:
+        compressed = compress_full_image(payload.image_base64)
+        key = meal_image_key(user.user_id, meal_id)
+        if await upload_image_base64(key, compressed):
+            doc["image_key"] = key
+        else:
+            # Storage unavailable: keep the photo inline so it is not lost;
+            # the lazy migration pass moves it out later.
+            doc["image_base64"] = compressed
+            doc["image_migrated"] = False
+
     await db.meals.insert_one(doc.copy())
     doc.pop("_id", None)
+
+    # Echo the photo back so the client can render it without a refetch.
+    if doc.get("image_key") and payload.image_base64:
+        doc["image_base64"] = compressed
 
     # Auto-refresh challenge progress whenever a meal is logged
     try:
@@ -309,6 +332,10 @@ async def get_meal(
             detail="Meal not found",
         )
 
+    # Full photos live in object storage; hydrate for the detail view.
+    if not doc.get("image_base64") and doc.get("image_key"):
+        doc["image_base64"] = await download_image_base64(doc["image_key"])
+
     return MealResponse(**doc)
 
 
@@ -335,9 +362,18 @@ async def update_meal(
     }
 
     if payload.image_base64:
-        updates["image_base64"] = compress_full_image(payload.image_base64)
+        compressed = compress_full_image(payload.image_base64)
+        key = meal_image_key(user.user_id, meal_id)
         updates["image_optimized"] = True
         updates["thumbnail_base64"] = make_thumbnail(payload.image_base64)
+        if await upload_image_base64(key, compressed):
+            updates["image_key"] = key
+            updates["image_base64"] = None
+            updates["image_migrated"] = True
+        else:
+            # Storage unavailable: keep inline; lazy migration retries later.
+            updates["image_base64"] = compressed
+            updates["image_migrated"] = False
 
     result = await db.meals.update_one(
         {
@@ -358,6 +394,9 @@ async def update_meal(
         {"_id": 0},
     )
 
+    if not doc.get("image_base64") and doc.get("image_key"):
+        doc["image_base64"] = await download_image_base64(doc["image_key"])
+
     return MealResponse(**doc)
 
 
@@ -366,12 +405,23 @@ async def delete_meal(
     meal_id: str,
     user: UserPublic = Depends(require_user),
 ):
+    existing = await db.meals.find_one(
+        {
+            "meal_id": meal_id,
+            "user_id": user.user_id,
+        },
+        {"_id": 0, "image_key": 1},
+    )
+
     result = await db.meals.delete_one(
         {
             "meal_id": meal_id,
             "user_id": user.user_id,
         }
     )
+
+    if existing and existing.get("image_key"):
+        await delete_image(existing["image_key"])
 
     if not result.deleted_count:
         raise HTTPException(
@@ -402,8 +452,9 @@ async def food_history(
     # Older meals may predate thumbnails; generate them once, lazily.
     await backfill_thumbnails(db, user.user_id, meals)
 
-    # Older meals may store huge full-res photos; shrink them once, lazily.
-    await recompress_old_images(db, user.user_id, meals)
+    # Older meals may store inline base64 photos; move them to object
+    # storage once, lazily (compressing oversized ones on the way out).
+    await migrate_images_to_storage(db, user.user_id, meals)
 
     return meals
 

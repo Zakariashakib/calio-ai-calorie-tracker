@@ -50,32 +50,6 @@ def compress_full_image(image_base64: str | None) -> str | None:
         return image_base64
 
 
-async def recompress_old_images(db, user_id: str, meals: list[dict]) -> None:
-    """Lazily shrink oversized full photos saved before compression existed.
-
-    `meals` are projected docs (no image_base64). Each meal is checked at
-    most once: after processing we set `image_optimized` so future calls
-    skip it.
-    """
-    pending = [m for m in meals if m.get("meal_id") and not m.get("image_optimized")]
-    for meal in pending:
-        full = await db.meals.find_one(
-            {"meal_id": meal["meal_id"], "user_id": user_id},
-            {"_id": 0, "image_base64": 1},
-        )
-        original = (full or {}).get("image_base64")
-        updates: dict = {"image_optimized": True}
-        if original and len(original) > FULL_COMPRESS_THRESHOLD:
-            compressed = compress_full_image(original)
-            if compressed and len(compressed) < len(original):
-                updates["image_base64"] = compressed
-        await db.meals.update_one(
-            {"meal_id": meal["meal_id"], "user_id": user_id},
-            {"$set": updates},
-        )
-        meal["image_optimized"] = True
-
-
 def make_thumbnail(image_base64: str | None) -> str | None:
     """Downscale a base64 image to a small square JPEG thumbnail.
 

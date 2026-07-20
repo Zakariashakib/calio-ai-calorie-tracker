@@ -1,21 +1,25 @@
 ---
 name: CalSnap image storage
-description: How meal photos are stored/compressed to keep Mongo bounded.
+description: How meal photos are stored (object storage) to keep Mongo bounded.
 ---
 
 # CalSnap meal photo storage
 
-Full meal photos are stored as base64 in the meal doc's `image_base64`; a small
-square `thumbnail_base64` is generated at save time. To keep DB size bounded,
-full images are recompressed to a bounded JPEG (max 1280px longest edge,
-quality 75) on save/update via `compress_full_image` in `backend/images.py`.
+Full meal photos live in Replit App Storage (default bucket); the meal doc
+stores only an `image_key` (`meals/{user_id}/{meal_id}.jpg`) plus a small
+inline `thumbnail_base64` for fast lists. Full images are recompressed to a
+bounded JPEG (max 1280px, q75) via `compress_full_image` before upload.
 
-- **Why:** raw uploads can be ~9MB each and accumulate over hundreds of meals.
-- Old meals predating compression are shrunk lazily on `GET /api/history` via
-  `recompress_old_images`; each meal is touched once, then flagged with
-  `image_optimized: True` so later calls skip it (mirrors the thumbnail backfill).
-- Compression is best-effort: undecodable/small (<400KB) images are kept as-is
-  so nothing is ever lost.
-- **Gotcha:** Pillow (`pillow`) is a real runtime dependency for `images.py`
-  but was missing from the installed env at one point — backend fails to import
-  if it's absent.
+- **Why:** raw uploads can be ~9MB each; embedding binary in docs bloated the DB.
+- Detail view (`GET /api/meals/{id}`) hydrates `image_base64` in the response
+  from storage, so the frontend contract is unchanged.
+- Old inline-base64 meals migrate lazily on `GET /api/history`
+  (`migrate_images_to_storage` in `backend/storage.py`), flagged with
+  `image_migrated` so each meal is touched once; no-photo meals also flagged.
+- If a storage upload fails at save time, the compressed base64 stays inline
+  (explicitly logged) and the lazy pass retries later — photos are never lost.
+- **Gotcha:** the Python SDK's default-bucket resolution failed in this env;
+  pass `Client(bucket_id=os.environ["DEFAULT_OBJECT_STORAGE_BUCKET_ID"])`.
+- **Gotcha:** Pillow is a real runtime dependency for `images.py`; backend
+  fails to import if absent.
+- Deleting a meal also best-effort deletes its stored object.

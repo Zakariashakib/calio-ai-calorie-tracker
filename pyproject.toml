@@ -17,6 +17,7 @@ dependencies = [
     "pymongo==4.6.3",
     "python-dotenv>=1.0.1",
     "python-multipart>=0.0.9",
+    "replit-object-storage>=1.0.2",
     "requests>=2.31.0",
     "uvicorn==0.25.0",
 ]
