@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -32,6 +33,7 @@ export default function ComparisonScreen() {
   const [beforeBase64, setBeforeBase64] = useState<string | null>(null);
   const [afterBase64, setAfterBase64] = useState<string | null>(null);
   const [result, setResult] = useState<CompareResponse | null>(null);
+  const [consumedItems, setConsumedItems] = useState<MealItem[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -84,20 +86,9 @@ export default function ComparisonScreen() {
         body: JSON.stringify({ before_image_base64: before, after_image_base64: after }),
       });
       setResult(res);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Comparison failed");
-      setIsError(true);
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const saveMeal = async () => {
-    if (!result) return;
-    setSaving(true);
-    try {
-      const items: MealItem[] = result.before.foods.map((food, i) => {
-        const afterFood = result.after.foods[i];
+      // Compute consumed items from the AI differential and store them as editable state
+      const computed: MealItem[] = res.before.foods.map((food, i) => {
+        const afterFood = res.after.foods[i];
         const ratio = afterFood
           ? Math.max(0, 1 - afterFood.estimated_weight_g / (food.estimated_weight_g || 1))
           : 1;
@@ -113,14 +104,38 @@ export default function ComparisonScreen() {
           sodium_mg: Math.round(food.sodium_mg * ratio),
         };
       });
+      setConsumedItems(computed.length ? computed : res.before.foods);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Comparison failed");
+      setIsError(true);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
+  const updateItem = (index: number, key: keyof MealItem, value: string) =>
+    setConsumedItems((current) =>
+      current.map((item, i) =>
+        i === index
+          ? { ...item, [key]: key === "name" || key === "portion" ? value : Number(value) || 0 }
+          : item
+      )
+    );
+
+  const removeItem = (index: number) =>
+    setConsumedItems((current) => current.filter((_, i) => i !== index));
+
+  const saveMeal = async () => {
+    if (!result) return;
+    setSaving(true);
+    try {
       await api("/meals", {
         method: "POST",
         body: JSON.stringify({
           meal_type: "Lunch",
           title: result.before.meal_name,
           eaten_at: new Date().toISOString(),
-          items: items.length ? items : result.before.foods,
+          items: consumedItems,
           image_base64: beforeBase64,
           source: "camera",
         }),
@@ -330,6 +345,43 @@ export default function ComparisonScreen() {
               </View>
             </View>
 
+            {/* Editable consumed food items */}
+            <View style={styles.editSection}>
+              <View style={styles.editSectionHeader}>
+                <Text style={styles.editSectionTitle}>Consumed foods</Text>
+                <Text style={styles.editHint}>Tap values to edit</Text>
+              </View>
+              {consumedItems.map((item, index) => (
+                <View key={item.item_id ?? index} style={styles.foodCard}>
+                  <View style={styles.foodTop}>
+                    <TextInput
+                      style={styles.foodName}
+                      value={item.name}
+                      onChangeText={(v) => updateItem(index, "name", v)}
+                    />
+                    <PressableScale style={styles.removeBtn} onPress={() => removeItem(index)}>
+                      <Ionicons name="trash-outline" size={16} color={colors.peach} />
+                    </PressableScale>
+                  </View>
+                  <View style={styles.fields}>
+                    <CField label="Grams" value={String(Math.round(item.estimated_weight_g))} onChange={(v) => updateItem(index, "estimated_weight_g", v)} />
+                    <CField label="Calories" value={String(Math.round(item.calories))} onChange={(v) => updateItem(index, "calories", v)} />
+                    <CField label="Protein" value={String(Math.round(item.protein_g))} onChange={(v) => updateItem(index, "protein_g", v)} />
+                  </View>
+                  <View style={styles.macroTextRow}>
+                    <Text style={styles.macroText}>{Math.round(item.carbs_g)}g carbs</Text>
+                    <Text style={styles.macroText}>{Math.round(item.fat_g)}g fat</Text>
+                    <Text style={styles.macroText}>{Math.round(item.fiber_g)}g fiber</Text>
+                  </View>
+                </View>
+              ))}
+              {consumedItems.length === 0 && (
+                <View style={styles.emptyItems}>
+                  <Text style={styles.emptyItemsText}>All items removed. Add at least one item to save.</Text>
+                </View>
+              )}
+            </View>
+
             {/* Side-by-side macro breakdown */}
             <View style={styles.breakdownCard}>
               <Text style={styles.breakdownTitle}>Macro Breakdown</Text>
@@ -347,7 +399,7 @@ export default function ComparisonScreen() {
               ))}
             </View>
 
-            <PressableScale style={styles.primary} onPress={saveMeal} disabled={saving}>
+            <PressableScale style={[styles.primary, consumedItems.length === 0 && { opacity: 0.4 }]} onPress={saveMeal} disabled={saving || consumedItems.length === 0}>
               {saving ? (
                 <ActivityIndicator color="white" />
               ) : (
@@ -371,6 +423,20 @@ export default function ComparisonScreen() {
       </KeyboardAvoidingView>
       <Toast visible={!!message} message={message} error={isError} onClose={() => { setMessage(""); setIsError(false); }} />
     </SafeAreaView>
+  );
+}
+
+function CField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        style={styles.fieldInput}
+      />
+    </View>
   );
 }
 
@@ -482,4 +548,22 @@ const styles = StyleSheet.create({
   breakdownBefore: { fontSize: 13, fontWeight: "800", color: colors.ink, minWidth: 36, textAlign: "right" },
   breakdownAfter: { fontSize: 13, fontWeight: "700", color: colors.muted, minWidth: 36, textAlign: "right" },
   breakdownConsumed: { fontSize: 14, fontWeight: "900", minWidth: 36, textAlign: "right" },
+
+  // Editable food item styles
+  editSection: { gap: 12 },
+  editSectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  editSectionTitle: { fontSize: 20, fontWeight: "900", color: colors.ink },
+  editHint: { fontSize: 11, color: colors.muted },
+  foodCard: { backgroundColor: colors.surface, padding: 16, borderRadius: radius.md, gap: 13, ...shadow },
+  foodTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  foodName: { flex: 1, color: colors.ink, fontSize: 17, fontWeight: "800", borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 5 },
+  removeBtn: { width: 34, height: 34, borderRadius: 12, backgroundColor: `${colors.peach}18`, alignItems: "center", justifyContent: "center" },
+  fields: { flexDirection: "row", gap: 9 },
+  field: { flex: 1, backgroundColor: colors.canvas, borderRadius: radius.sm, padding: 9, gap: 4 },
+  fieldLabel: { fontSize: 9, color: colors.muted, textTransform: "uppercase" },
+  fieldInput: { color: colors.ink, fontWeight: "800", fontSize: 15, padding: 0 },
+  macroTextRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  macroText: { color: colors.muted, fontSize: 11 },
+  emptyItems: { padding: 16, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: "center" },
+  emptyItemsText: { color: colors.muted, fontSize: 13, textAlign: "center" },
 });
