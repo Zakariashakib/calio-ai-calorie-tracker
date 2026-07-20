@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -58,6 +58,19 @@ export default function RecipesScreen() {
       if (debounce.current) clearTimeout(debounce.current);
     };
   }, [category, query, savedOnly, load]);
+
+  // Refetch when returning to the list (e.g. after toggling a save on the
+  // recipe detail screen), skipping the initial mount handled above.
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      load(category, query, savedOnly);
+    }, [category, query, savedOnly, load]),
+  );
 
   const toggleSave = useCallback(async (recipe: Recipe) => {
     const next = !recipe.saved;
