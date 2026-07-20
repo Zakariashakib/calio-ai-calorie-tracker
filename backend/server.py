@@ -60,6 +60,13 @@ from models import (
     WeightInput,
     now_iso,
 )
+from recipes_catalog import RECIPE_CATEGORIES, RECIPES
+from models import (
+    BookmarkInput,
+    RecipeDetail,
+    RecipeListResponse,
+    RecipeSummary,
+)
 from nutrition import (
     build_dashboard,
     build_weekly_report,
@@ -519,6 +526,116 @@ async def get_challenges(
             results.append(status.model_dump())
 
     return results
+
+
+async def _user_saved_recipe_ids(user_id: str) -> set:
+    doc = await db.recipe_bookmarks.find_one(
+        {"user_id": user_id}, {"_id": 0, "recipe_ids": 1}
+    )
+    return set(doc.get("recipe_ids", [])) if doc else set()
+
+
+def _rank_recipes_for_goals(profile: Optional[dict]) -> List[dict]:
+    """Order recipes so those closest to the user's per-meal calorie/macro
+    targets come first. Falls back to the raw list when no profile exists."""
+    if not profile:
+        return list(RECIPES)
+
+    goals = profile.get("goals") or {}
+    daily_cal = goals.get("calories") or 0
+    if not daily_cal:
+        return list(RECIPES)
+
+    # Approx. per-meal budget (3 main meals a day).
+    target_cal = daily_cal / 3.0
+    target_protein = (goals.get("protein_g") or 0) / 3.0
+    goal = profile.get("goal", "maintain")
+
+    def score(recipe: dict) -> float:
+        cal_diff = abs(recipe["kcal"] - target_cal) / max(target_cal, 1)
+        protein_diff = abs(recipe["protein_g"] - target_protein) / max(target_protein, 1)
+        s = cal_diff + 0.5 * protein_diff
+        # Nudge ordering by goal direction.
+        if goal == "lose":
+            s += recipe["kcal"] / 2000.0          # prefer lighter meals
+            s -= recipe["protein_g"] / 200.0      # but reward protein
+        elif goal == "gain":
+            s -= recipe["kcal"] / 2000.0          # prefer calorie-dense meals
+        return s
+
+    return sorted(RECIPES, key=score)
+
+
+@api_router.get("/recipes", response_model=RecipeListResponse)
+async def list_recipes(
+    category: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    user: UserPublic = Depends(require_user),
+):
+    profile = await db.profiles.find_one(
+        {"user_id": user.user_id}, {"_id": 0}
+    )
+    saved_ids = await _user_saved_recipe_ids(user.user_id)
+
+    ranked = _rank_recipes_for_goals(profile)
+
+    if category and category != "All":
+        ranked = [r for r in ranked if r["category"] == category]
+    if q:
+        needle = q.strip().lower()
+        ranked = [
+            r for r in ranked
+            if needle in r["title"].lower()
+            or needle in r["description"].lower()
+        ]
+
+    summaries = [
+        RecipeSummary(
+            **{k: r[k] for k in (
+                "id", "title", "minutes", "difficulty", "difficulty_label",
+                "category", "image", "kcal", "protein_g", "carbs_g",
+                "fat_g", "fiber_g",
+            )},
+            saved=r["id"] in saved_ids,
+        )
+        for r in ranked
+    ]
+
+    return RecipeListResponse(
+        categories=list(RECIPE_CATEGORIES),
+        recipes=summaries,
+        matched_to_goals=bool(profile and (profile.get("goals") or {}).get("calories")),
+    )
+
+
+@api_router.get("/recipes/{recipe_id}", response_model=RecipeDetail)
+async def get_recipe(
+    recipe_id: str,
+    user: UserPublic = Depends(require_user),
+):
+    recipe = next((r for r in RECIPES if r["id"] == recipe_id), None)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    saved_ids = await _user_saved_recipe_ids(user.user_id)
+    return RecipeDetail(**recipe, saved=recipe_id in saved_ids)
+
+
+@api_router.post("/recipes/bookmark")
+async def toggle_recipe_bookmark(
+    payload: BookmarkInput,
+    user: UserPublic = Depends(require_user),
+):
+    if not any(r["id"] == payload.recipe_id for r in RECIPES):
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    op = "$addToSet" if payload.saved else "$pull"
+    await db.recipe_bookmarks.update_one(
+        {"user_id": user.user_id},
+        {op: {"recipe_ids": payload.recipe_id}},
+        upsert=True,
+    )
+    return {"recipe_id": payload.recipe_id, "saved": payload.saved}
 
 
 @api_router.post(

@@ -199,6 +199,39 @@ class BarcodeResponse(BaseModel):
     item: MealItem
 
 
+class RecipeSummary(BaseModel):
+    id: str
+    title: str
+    minutes: int
+    difficulty: int
+    difficulty_label: str
+    category: str
+    image: str
+    kcal: int
+    protein_g: int
+    carbs_g: int
+    fat_g: int
+    fiber_g: int
+    saved: bool = False
+
+
+class RecipeDetail(RecipeSummary):
+    description: str
+    ingredients: list[str]
+    steps: list[str]
+
+
+class RecipeListResponse(BaseModel):
+    categories: list[dict]
+    recipes: list[RecipeSummary]
+    matched_to_goals: bool
+
+
+class BookmarkInput(BaseModel):
+    recipe_id: str
+    saved: bool
+
+
 class AIConfigSchema(BaseModel):
     active_provider: Literal["openrouter", "gemini"] = "gemini"
     openrouter_api_key: str = ""

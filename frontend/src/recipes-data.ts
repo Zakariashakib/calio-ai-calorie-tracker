@@ -1,4 +1,7 @@
-/** Mock recipe catalog for the discovery screen (design reference parity). */
+/** Recipe types for the discovery screen. Data comes from the backend
+ * (`GET /api/recipes`), matched to the signed-in user's goals. */
+
+export type RecipeCategory = { id: string; image: string };
 
 export type Recipe = {
   id: string;
@@ -7,80 +10,73 @@ export type Recipe = {
   difficulty: 1 | 2 | 3 | 4;
   difficultyLabel: "Easy" | "Medium" | "Hard";
   kcal: number;
-  category: "Vegan" | "Protein" | "Snacks" | "Sweets";
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  category: string;
   image: string;
+  saved: boolean;
 };
 
-const unsplash = (id: string) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
+export type RecipeDetail = Recipe & {
+  description: string;
+  ingredients: string[];
+  steps: string[];
+};
 
-export const RECIPE_CATEGORIES = [
-  { id: "All", image: unsplash("photo-1546069901-ba9599a7e63c") },
-  { id: "Vegan", image: unsplash("photo-1512621776951-a57141f2eefd") },
-  { id: "Protein", image: unsplash("photo-1467003909585-2f8a72700288") },
-  { id: "Snacks", image: unsplash("photo-1568901346375-23c9450c58cd") },
-  { id: "Sweets", image: unsplash("photo-1567620905732-2d1ec7ab7445") },
-] as const;
+/** API shapes (snake_case difficulty_label from FastAPI). */
+type ApiRecipeSummary = {
+  id: string;
+  title: string;
+  minutes: number;
+  difficulty: number;
+  difficulty_label: string;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  category: string;
+  image: string;
+  saved: boolean;
+};
 
-export const RECIPES: Recipe[] = [
-  {
-    id: "quinoa-veggie-bowl",
-    title: "Quinoa Veggie Bowl",
-    minutes: 45,
-    difficulty: 3,
-    difficultyLabel: "Easy",
-    kcal: 750,
-    category: "Vegan",
-    image: unsplash("photo-1512621776951-a57141f2eefd"),
-  },
-  {
-    id: "grilled-salmon-bowl",
-    title: "Grilled Salmon Bowl",
-    minutes: 35,
-    difficulty: 2,
-    difficultyLabel: "Medium",
-    kcal: 620,
-    category: "Protein",
-    image: unsplash("photo-1467003909585-2f8a72700288"),
-  },
-  {
-    id: "rainbow-salad",
-    title: "Rainbow Crunch Salad",
-    minutes: 20,
-    difficulty: 1,
-    difficultyLabel: "Easy",
-    kcal: 430,
-    category: "Vegan",
-    image: unsplash("photo-1546069901-ba9599a7e63c"),
-  },
-  {
-    id: "chicken-skewers",
-    title: "Herb Chicken Skewers",
-    minutes: 40,
-    difficulty: 3,
-    difficultyLabel: "Medium",
-    kcal: 540,
-    category: "Protein",
-    image: unsplash("photo-1555939594-58d7cb561ad1"),
-  },
-  {
-    id: "smash-burger",
-    title: "Smash Burger Sliders",
-    minutes: 30,
-    difficulty: 2,
-    difficultyLabel: "Easy",
-    kcal: 820,
-    category: "Snacks",
-    image: unsplash("photo-1568901346375-23c9450c58cd"),
-  },
-  {
-    id: "berry-pancakes",
-    title: "Berry Oat Pancakes",
-    minutes: 25,
-    difficulty: 2,
-    difficultyLabel: "Easy",
-    kcal: 480,
-    category: "Sweets",
-    image: unsplash("photo-1567620905732-2d1ec7ab7445"),
-  },
-];
+type ApiRecipeDetail = ApiRecipeSummary & {
+  description: string;
+  ingredients: string[];
+  steps: string[];
+};
+
+export type RecipeListResponse = {
+  categories: RecipeCategory[];
+  recipes: ApiRecipeSummary[];
+  matched_to_goals: boolean;
+};
+
+export function mapRecipe(r: ApiRecipeSummary): Recipe {
+  return {
+    id: r.id,
+    title: r.title,
+    minutes: r.minutes,
+    difficulty: Math.min(4, Math.max(1, r.difficulty)) as 1 | 2 | 3 | 4,
+    difficultyLabel: r.difficulty_label as Recipe["difficultyLabel"],
+    kcal: r.kcal,
+    protein_g: r.protein_g,
+    carbs_g: r.carbs_g,
+    fat_g: r.fat_g,
+    fiber_g: r.fiber_g,
+    category: r.category,
+    image: r.image,
+    saved: r.saved,
+  };
+}
+
+export function mapRecipeDetail(r: ApiRecipeDetail): RecipeDetail {
+  return {
+    ...mapRecipe(r),
+    description: r.description,
+    ingredients: r.ingredients,
+    steps: r.steps,
+  };
+}
