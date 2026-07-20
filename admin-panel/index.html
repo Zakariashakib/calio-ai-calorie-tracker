@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CalSnap Admin Panel — AI Engine Controller</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/admin-assets/style.css">
+</head>
+<body>
+    <!-- PIN Login Modal Overlay -->
+    <div id="login-modal" class="modal-overlay">
+        <div class="modal-card glass-panel">
+            <div class="modal-header">
+                <div class="logo-circle">🥗</div>
+                <h2>CalSnap Admin Portal</h2>
+                <p>API & AI Engine Control Center</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="input-group">
+                    <label for="admin-pin">Security PIN Code</label>
+                    <input type="password" id="admin-pin" placeholder="Enter PIN (Default: calsnap2026)" required autocomplete="current-password">
+                </div>
+                <div id="login-error" class="error-msg hidden">Invalid PIN Code. Please try again.</div>
+                <button type="submit" class="btn btn-primary btn-full">Unlock Dashboard ⚡</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Application -->
+    <div id="dashboard-app" class="dashboard-container hidden">
+        <!-- Top Navigation Header -->
+        <header class="top-nav glass-panel">
+            <div class="nav-brand">
+                <span class="brand-icon">🥗</span>
+                <div class="brand-text">
+                    <h1>CalSnap <span class="badge badge-accent">Admin Hub</span></h1>
+                    <span class="sub-text">Connected to API Server • Real-Time AI Control</span>
+                </div>
+            </div>
+            <div class="nav-controls">
+                <div id="api-status-badge" class="status-indicator online">
+                    <span class="status-dot"></span>
+                    <span class="status-text">API Healthy</span>
+                </div>
+                <button id="refresh-stats-btn" class="btn btn-secondary btn-sm" title="Refresh Live Metrics">🔄 Refresh</button>
+                <button id="logout-btn" class="btn btn-outline btn-sm">🔒 Lock / Logout</button>
+            </div>
+        </header>
+
+        <!-- Toast Feedback Notification -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- Metric Stat Cards -->
+        <section class="stats-grid">
+            <div class="stat-card glass-panel">
+                <div class="stat-icon provider-icon">🤖</div>
+                <div class="stat-content">
+                    <span class="stat-label">Active AI Provider</span>
+                    <h3 id="stat-provider">Gemini AI Studio</h3>
+                    <span id="stat-model-sub" class="stat-sub">gemini-2.5-flash</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel">
+                <div class="stat-icon scan-icon">📸</div>
+                <div class="stat-content">
+                    <span class="stat-label">Meal Vision Scans</span>
+                    <h3 id="stat-scans">0</h3>
+                    <span class="stat-sub">/api/scan</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel">
+                <div class="stat-icon voice-icon">🎙️</div>
+                <div class="stat-content">
+                    <span class="stat-label">Voice Log Entries</span>
+                    <h3 id="stat-voice">0</h3>
+                    <span class="stat-sub">/api/voice-log</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel">
+                <div class="stat-icon coach-icon">💬</div>
+                <div class="stat-content">
+                    <span class="stat-label">AI Coach Queries</span>
+                    <h3 id="stat-coach">0</h3>
+                    <span class="stat-sub">/api/coach</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel">
+                <div class="stat-icon users-icon">⚡</div>
+                <div class="stat-content">
+                    <span class="stat-label">Registered Users</span>
+                    <h3 id="stat-users">0</h3>
+                    <span id="stat-errors-sub" class="stat-sub error-text">0 Errors recorded</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Configuration & Playground Layout -->
+        <main class="main-layout">
+            <!-- Left Side: AI Engine Controller (OpenRouter Free vs Gemini Studio) -->
+            <div class="config-panel glass-panel">
+                <div class="panel-header">
+                    <h2>🎛️ AI Engine Switcher & Controller</h2>
+                    <p>Switch between OpenRouter Free AI and Google AI Studio Gemini seamlessly with zero server restart.</p>
+                </div>
+
+                <!-- Provider Tabs Switcher -->
+                <div class="provider-tabs">
+                    <button type="button" class="tab-btn active" data-provider="openrouter">
+                        <span class="tab-icon">🟢</span>
+                        <div class="tab-title">
+                            <strong>OpenRouter</strong>
+                            <small>Only Free AI Models</small>
+                        </div>
+                    </button>
+                    <button type="button" class="tab-btn" data-provider="gemini">
+                        <span class="tab-icon">🔵</span>
+                        <div class="tab-title">
+                            <strong>Gemini AI Studio</strong>
+                            <small>Google GenAI API</small>
+                        </div>
+                    </button>
+                </div>
+
+                <form id="ai-config-form" class="config-form">
+                    <input type="hidden" id="active-provider-input" value="openrouter">
+
+                    <!-- OpenRouter Free Settings Section -->
+                    <div id="section-openrouter" class="provider-section">
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="openrouter-model-select">OpenRouter Free Model</label>
+                                <select id="openrouter-model-select" class="form-select">
+                                    <!-- Populated via API -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="openrouter-custom-model">Custom Model ID (Must be :free)</label>
+                                <input type="text" id="openrouter-custom-model" placeholder="e.g. google/gemini-2.0-flash-exp:free">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="openrouter-api-key">OpenRouter API Key <small class="masked-hint" id="hint-or-key"></small></label>
+                                <div class="key-input-wrapper">
+                                    <input type="password" id="openrouter-api-key" placeholder="sk-or-v1-... (Leave blank to keep current)">
+                                    <button type="button" class="btn-toggle-vis" onclick="toggleVis('openrouter-api-key')">👁️</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gemini AI Studio Settings Section -->
+                    <div id="section-gemini" class="provider-section hidden">
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="gemini-model-select">Gemini AI Studio Model</label>
+                                <select id="gemini-model-select" class="form-select">
+                                    <!-- Populated via API -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="gemini-api-key">Gemini AI Studio API Key <small class="masked-hint" id="hint-gemini-key"></small></label>
+                                <div class="key-input-wrapper">
+                                    <input type="password" id="gemini-api-key" placeholder="AIzaSy... (Leave blank to keep current)">
+                                    <button type="button" class="btn-toggle-vis" onclick="toggleVis('gemini-api-key')">👁️</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Common AI Settings (System Prompt & Temperature) -->
+                    <div class="divider"></div>
+                    <h3 class="section-subtitle">⚙️ Hyperparameters & System Behavior</h3>
+
+                    <div class="form-row">
+                        <div class="input-group">
+                            <div class="slider-header">
+                                <label for="temperature-slider">Creativity & Variability (Temperature)</label>
+                                <span id="temp-val-display" class="slider-badge">0.3</span>
+                            </div>
+                            <input type="range" id="temperature-slider" min="0.0" max="1.0" step="0.05" value="0.3">
+                            <div class="slider-labels">
+                                <span>0.0 (Strict / Deterministic)</span>
+                                <span>0.5 (Balanced)</span>
+                                <span>1.0 (High Creative)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label for="system-prompt-input">Core CalSnap System Prompt</label>
+                            <textarea id="system-prompt-input" rows="5" placeholder="Define core persona and instructions..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="form-row checkbox-row">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="auto-fallback-toggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>Enable Auto-Fallback Protection</strong>
+                            <p>Automatically switch between OpenRouter Free & Gemini if one API encounters rate-limits or errors.</p>
+                        </div>
+                    </div>
+
+                    <!-- Admin PIN Update Option -->
+                    <details class="security-details">
+                        <summary>🛡️ Update Admin Security PIN Code</summary>
+                        <div class="form-row mt-3">
+                            <div class="input-group">
+                                <label for="new-admin-pin">New Admin PIN Code</label>
+                                <input type="password" id="new-admin-pin" placeholder="Enter new PIN code to change (or leave blank)">
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary btn-save">
+                            <span>💾 Save & Apply Live AI Configuration</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Right Side: Live AI Tester & Real-time Request Logs -->
+            <div class="right-column">
+                <!-- Live AI Playground Card -->
+                <div class="playground-panel glass-panel">
+                    <div class="panel-header">
+                        <h2>⚡ Live AI Playground / Test Query</h2>
+                        <p>Verify your currently active AI model and key before users make queries.</p>
+                    </div>
+                    <form id="test-ai-form" class="test-form">
+                        <div class="input-group">
+                            <label for="test-prompt">Sample Prompt / Query</label>
+                            <textarea id="test-prompt" rows="3">Estimate calories and macro breakdown for 2 boiled eggs, 1 slice of sourdough toast, and half an avocado.</textarea>
+                        </div>
+                        <div class="test-actions">
+                            <button type="submit" id="btn-run-test" class="btn btn-accent">
+                                <span>🚀 Test Active AI Engine</span>
+                            </button>
+                            <span id="test-status-pill" class="status-pill hidden"></span>
+                        </div>
+                    </form>
+                    <!-- Test Result Output Box -->
+                    <div id="test-output-wrapper" class="test-output-wrapper hidden">
+                        <div class="output-meta">
+                            <span id="test-meta-info" class="meta-badge"></span>
+                            <span id="test-meta-latency" class="meta-latency"></span>
+                        </div>
+                        <pre id="test-output-code" class="output-code"></pre>
+                    </div>
+                </div>
+
+                <!-- Real-Time AI Logs Table -->
+                <div class="logs-panel glass-panel">
+                    <div class="panel-header flex-between">
+                        <div>
+                            <h2>📜 Recent AI Execution Logs</h2>
+                            <p>Live stream of queries handled across API routes.</p>
+                        </div>
+                        <button id="refresh-logs-btn" class="btn btn-secondary btn-xs">🔄 Refresh Logs</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Route</th>
+                                    <th>Provider & Model</th>
+                                    <th>Latency</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-tbody">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Loading live AI logs...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/admin-assets/app.js"></script>
+</body>
+</html>

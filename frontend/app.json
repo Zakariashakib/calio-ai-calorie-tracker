@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "CalSnap",
+    "slug": "calsnap",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "calsnap",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emergent.calsnapai.z7gts6",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan meals for instant nutrition estimates.",
+        "NSMicrophoneUsageDescription": "Log meals quickly with your voice.",
+        "NSPhotoLibraryUsageDescription": "Choose meal photos for nutrition analysis.",
+        "NSUserNotificationsUsageDescription": "Receive helpful hydration and meal reminders."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.emergent.calsnapai.z7gts6",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan meals for instant nutrition estimates.",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose meal photos for nutrition analysis."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Log meals quickly with your voice."
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F1EC"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
