@@ -23,3 +23,6 @@ bounded JPEG (max 1280px, q75) via `compress_full_image` before upload.
 - **Gotcha:** Pillow is a real runtime dependency for `images.py`; backend
   fails to import if absent.
 - Deleting a meal also best-effort deletes its stored object.
+
+## AI recipe photos (per-recipe)
+AI-generated recipes get a distinct image via Pollinations (keyless, seed = hash(title)) validated with an httpx GET; any failure falls back to the static RECIPE_CATEGORY_IMAGES entry. Pollinations rate-limits under concurrency, so a fresh batch may serve several category fallbacks — that's expected, not a bug. LoremFlickr was rejected: it returns a generic placeholder ("defaultImage") when no keyword matches.

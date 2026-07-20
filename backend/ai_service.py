@@ -1,9 +1,11 @@
+import asyncio
 import json
 import logging
 import os
 import re
 import time
 import base64
+from urllib.parse import quote_plus
 from pathlib import Path
 import tempfile
 from typing import Optional, Tuple
@@ -513,6 +515,45 @@ _DEFAULT_RECIPE_IMAGE = "https://images.unsplash.com/photo-1546069901-ba9599a7e6
 
 _DIFFICULTY_LABELS = {1: "Easy", 2: "Medium", 3: "Hard"}
 
+def _recipe_image_url(title: str) -> str:
+    """Build a distinct, keyless image URL for one recipe title.
+
+    Uses Pollinations, which generates an appetizing photo of the exact dish.
+    The seed is derived from the title so the same recipe stays stable.
+    """
+    prompt = f"professional food photography of {title}, appetizing, plated, natural light, high detail"
+    seed = abs(hash(title)) % 1000000
+    return (
+        f"https://image.pollinations.ai/prompt/{quote_plus(prompt)}"
+        f"?width=900&height=600&nologo=true&seed={seed}"
+    )
+
+
+async def _fetch_recipe_image(
+    client: httpx.AsyncClient,
+    title: str,
+    category: str,
+) -> str:
+    """Resolve a distinct, relevant photo URL for one recipe.
+
+    Verifies the generated image is reachable so a broken source falls back to
+    the static category image instead of showing a broken picture.
+    """
+    fallback = RECIPE_CATEGORY_IMAGES.get(category, _DEFAULT_RECIPE_IMAGE)
+    url = _recipe_image_url(title)
+    for attempt in range(2):
+        try:
+            resp = await client.get(url, timeout=30.0)
+            content_type = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and content_type.startswith("image"):
+                return url
+        except Exception as exc:
+            logger.info(
+                f"Recipe image fetch failed for '{title}' (attempt {attempt + 1}): {exc}"
+            )
+    logger.info(f"Using category image fallback for '{title}'")
+    return fallback
+
 
 def _coerce_generated_recipe(item: dict) -> Optional[dict]:
     """Normalize one AI-generated recipe into the exact catalog shape.
@@ -632,6 +673,21 @@ Include a mix of categories. Every recipe needs at least 4 ingredients and 3 ste
             status_code=502,
             detail="AI returned no usable recipes",
         )
+
+    # Give each recipe a distinct, relevant photo. Fetch concurrently; any
+    # failure leaves the category image already set by _coerce_generated_recipe.
+    try:
+        async with httpx.AsyncClient() as client:
+            images = await asyncio.gather(
+                *(
+                    _fetch_recipe_image(client, r["title"], r["category"])
+                    for r in recipes
+                )
+            )
+        for recipe, image in zip(recipes, images):
+            recipe["image"] = image
+    except Exception as exc:
+        logger.warning(f"Recipe image enrichment failed, keeping category images: {exc}")
 
     return recipes
 
