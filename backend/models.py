@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def now_iso() -> str:
@@ -23,7 +23,13 @@ class AuthSessionRequest(BaseModel):
 
 class ProfileInput(BaseModel):
     gender: Literal["female", "male", "other"]
-    age: int = Field(ge=13, le=100)
+    # Age may be sent directly (legacy clients) or derived from date_of_birth.
+    age: Optional[int] = Field(default=None, ge=13, le=100)
+    date_of_birth: Optional[str] = None  # ISO date, e.g. "1998-06-15"
+    name: Optional[str] = Field(default=None, max_length=80)
+    preferred_unit: Literal["metric", "imperial"] = "metric"
+    # Height/weight are always stored in canonical metric units; imperial
+    # display/entry is converted by the client before submit.
     height_cm: float = Field(ge=100, le=250)
     weight_kg: float = Field(ge=30, le=350)
     activity_level: Literal[
@@ -35,6 +41,61 @@ class ProfileInput(BaseModel):
     ]
     goal: Literal["lose", "maintain", "gain"]
     target_weight_kg: float = Field(ge=30, le=350)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(
+        cls,
+        value: Optional[str],
+    ) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def check_date_of_birth(
+        cls,
+        value: Optional[str],
+    ) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(
+                "date_of_birth must be an ISO date (YYYY-MM-DD)"
+            ) from exc
+        if parsed > date.today():
+            raise ValueError(
+                "date_of_birth cannot be in the future"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def resolve_age(self) -> "ProfileInput":
+        if self.date_of_birth:
+            born = date.fromisoformat(self.date_of_birth)
+            today = date.today()
+            derived = (
+                today.year
+                - born.year
+                - (
+                    (today.month, today.day)
+                    < (born.month, born.day)
+                )
+            )
+            if not 13 <= derived <= 100:
+                raise ValueError(
+                    "Age must be between 13 and 100 years"
+                )
+            self.age = derived
+        if self.age is None:
+            raise ValueError(
+                "Either age or date_of_birth is required"
+            )
+        return self
 
 
 class Goals(BaseModel):

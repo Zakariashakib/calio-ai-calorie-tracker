@@ -184,13 +184,17 @@ async def save_profile(
         upsert=True,
     )
 
+    user_updates: Dict[str, Any] = {
+        "onboarding_complete": True,
+    }
+
+    # Keep the account display name in sync when the wizard captures one.
+    if payload.name:
+        user_updates["name"] = payload.name
+
     await db.users.update_one(
         {"user_id": user.user_id},
-        {
-            "$set": {
-                "onboarding_complete": True,
-            }
-        },
+        {"$set": user_updates},
     )
 
     return ProfileResponse(

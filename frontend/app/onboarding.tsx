@@ -5,7 +5,9 @@ import {
   router,
 } from "expo-router";
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -67,8 +69,34 @@ const activityDetails = [
   "Physical work or intense training",
 ];
 
+const KG_PER_LB = 0.45359237;
+
+const CM_PER_IN = 2.54;
+
+const round1 = (value: number) =>
+  Math.round(value * 10) / 10;
+
+const kgToLb = (value: string) => {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    && parsed > 0
+    ? String(round1(parsed / KG_PER_LB))
+    : value;
+};
+
+const lbToKg = (value: string) => {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    && parsed > 0
+    ? String(round1(parsed * KG_PER_LB))
+    : value;
+};
+
 export default function Onboarding() {
   const {
+    user,
     refreshUser,
   } = useAuth();
 
@@ -90,11 +118,34 @@ export default function Onboarding() {
       (typeof goals)[number]
     >("lose");
 
-  const [age, setAge] =
-    useState("28");
+  const [name, setName] = useState(
+    user?.name ?? "",
+  );
 
-  const [height, setHeight] =
+  const nameEdited = useRef(false);
+
+  const [unitPref, setUnitPref] =
+    useState<"metric" | "imperial">(
+      "metric",
+    );
+
+  const [dobDay, setDobDay] =
+    useState("15");
+
+  const [dobMonth, setDobMonth] =
+    useState("6");
+
+  const [dobYear, setDobYear] =
+    useState("1998");
+
+  const [heightCm, setHeightCm] =
     useState("165");
+
+  const [heightFt, setHeightFt] =
+    useState("5");
+
+  const [heightIn, setHeightIn] =
+    useState("5");
 
   const [weight, setWeight] =
     useState("72");
@@ -114,17 +165,194 @@ export default function Onboarding() {
     "Choose your goal",
   ];
 
+  // Prefill the name from the signed-in account once it is available,
+  // without clobbering anything the user already typed.
+  useEffect(() => {
+    if (
+      !nameEdited.current
+      && !name
+      && user?.name
+    ) {
+      setName(user.name);
+    }
+  }, [name, user?.name]);
+
+  const changeName = (value: string) => {
+    nameEdited.current = true;
+    setName(value);
+  };
+
+  const derivedAge = useMemo(() => {
+    const day = Number(dobDay);
+    const month = Number(dobMonth);
+    const year = Number(dobYear);
+
+    if (
+      !day
+      || !month
+      || !year
+      || dobYear.trim().length !== 4
+    ) {
+      return null;
+    }
+
+    const born = new Date(
+      year,
+      month - 1,
+      day,
+    );
+
+    // Reject impossible dates like Feb 30 (Date silently rolls them over).
+    if (
+      born.getFullYear() !== year
+      || born.getMonth() !== month - 1
+      || born.getDate() !== day
+    ) {
+      return null;
+    }
+
+    const today = new Date();
+
+    if (born > today) {
+      return null;
+    }
+
+    let age =
+      today.getFullYear() - year;
+
+    if (
+      today.getMonth() + 1 < month
+      || (today.getMonth() + 1 === month
+        && today.getDate() < day)
+    ) {
+      age -= 1;
+    }
+
+    return age;
+  }, [dobDay, dobMonth, dobYear]);
+
+  const dobIso = useMemo(() => {
+    if (derivedAge === null) {
+      return null;
+    }
+
+    return [
+      dobYear.trim(),
+      dobMonth.trim().padStart(2, "0"),
+      dobDay.trim().padStart(2, "0"),
+    ].join("-");
+  }, [
+    derivedAge,
+    dobDay,
+    dobMonth,
+    dobYear,
+  ]);
+
+  // Canonical metric values regardless of the display unit; the backend
+  // always receives metric.
+  const metricValues = useMemo(() => {
+    if (unitPref === "metric") {
+      return {
+        heightCm: Number(heightCm),
+        weightKg: Number(weight),
+        targetKg: Number(target),
+      };
+    }
+
+    return {
+      heightCm:
+        (Number(heightFt) * 12
+          + Number(heightIn))
+        * CM_PER_IN,
+      weightKg:
+        Number(weight) * KG_PER_LB,
+      targetKg:
+        Number(target) * KG_PER_LB,
+    };
+  }, [
+    unitPref,
+    heightCm,
+    heightFt,
+    heightIn,
+    weight,
+    target,
+  ]);
+
+  const switchUnit = (
+    next: "metric" | "imperial",
+  ) => {
+    if (next === unitPref) {
+      return;
+    }
+
+    if (next === "imperial") {
+      const totalIn =
+        Number(heightCm) / CM_PER_IN;
+
+      if (
+        Number.isFinite(totalIn)
+        && totalIn > 0
+      ) {
+        let feet = Math.floor(
+          totalIn / 12,
+        );
+
+        let inches = Math.round(
+          totalIn % 12,
+        );
+
+        if (inches === 12) {
+          feet += 1;
+          inches = 0;
+        }
+
+        setHeightFt(String(feet));
+        setHeightIn(String(inches));
+      }
+
+      setWeight(kgToLb(weight));
+      setTarget(kgToLb(target));
+    } else {
+      const cm =
+        (Number(heightFt) * 12
+          + Number(heightIn))
+        * CM_PER_IN;
+
+      if (
+        Number.isFinite(cm)
+        && cm > 0
+      ) {
+        setHeightCm(
+          String(round1(cm)),
+        );
+      }
+
+      setWeight(lbToKg(weight));
+      setTarget(lbToKg(target));
+    }
+
+    setUnitPref(next);
+  };
+
+  const weightUnit =
+    unitPref === "metric" ? "kg" : "lb";
+
   const valid = useMemo(
     () =>
-      Number(age) >= 13
-      && Number(height) >= 100
-      && Number(weight) >= 30
-      && Number(target) >= 30,
+      name.trim().length > 0
+      && derivedAge !== null
+      && derivedAge >= 13
+      && derivedAge <= 100
+      && metricValues.heightCm >= 100
+      && metricValues.heightCm <= 250
+      && metricValues.weightKg >= 30
+      && metricValues.weightKg <= 350
+      && metricValues.targetKg >= 30
+      && metricValues.targetKg <= 350,
     [
-      age,
-      height,
-      weight,
-      target,
+      name,
+      derivedAge,
+      metricValues,
     ],
   );
 
@@ -138,16 +366,22 @@ export default function Onboarding() {
           method: "PUT",
           body: JSON.stringify({
             gender,
-            age: Number(age),
-            height_cm:
-              Number(height),
-            weight_kg:
-              Number(weight),
+            name: name.trim(),
+            date_of_birth: dobIso,
+            age: derivedAge,
+            preferred_unit: unitPref,
+            height_cm: round1(
+              metricValues.heightCm,
+            ),
+            weight_kg: round1(
+              metricValues.weightKg,
+            ),
             activity_level:
               activity,
             goal,
-            target_weight_kg:
-              Number(target),
+            target_weight_kg: round1(
+              metricValues.targetKg,
+            ),
           }),
         },
       );
@@ -221,6 +455,14 @@ export default function Onboarding() {
         >
           {step === 0 ? (
             <>
+              <Input
+                label="Your name"
+                value={name}
+                onChange={changeName}
+                keyboard="default"
+                testID="onboarding-name-input"
+              />
+
               <Text style={styles.label}>
                 Gender
               </Text>
@@ -245,30 +487,108 @@ export default function Onboarding() {
                 )}
               </View>
 
+              <Text style={styles.label}>
+                Units
+              </Text>
+
+              <View style={styles.options}>
+                <Choice
+                  selected={
+                    unitPref === "metric"
+                  }
+                  label="Metric"
+                  detail="kg · cm"
+                  onPress={() =>
+                    switchUnit("metric")
+                  }
+                  testID="onboarding-unit-metric"
+                />
+
+                <Choice
+                  selected={
+                    unitPref === "imperial"
+                  }
+                  label="Imperial"
+                  detail="lb · ft/in"
+                  onPress={() =>
+                    switchUnit("imperial")
+                  }
+                  testID="onboarding-unit-imperial"
+                />
+              </View>
+
+              <Text style={styles.label}>
+                Date of birth
+              </Text>
+
               <View style={styles.inputRow}>
                 <Input
-                  label="Age"
-                  value={age}
-                  onChange={setAge}
-                  unit="years"
-                  testID="onboarding-age-input"
+                  label="Day"
+                  value={dobDay}
+                  onChange={setDobDay}
+                  testID="onboarding-dob-day-input"
                 />
 
                 <Input
-                  label="Height"
-                  value={height}
-                  onChange={setHeight}
-                  unit="cm"
-                  testID="onboarding-height-input"
+                  label="Month"
+                  value={dobMonth}
+                  onChange={setDobMonth}
+                  testID="onboarding-dob-month-input"
+                />
+
+                <Input
+                  label="Year"
+                  value={dobYear}
+                  onChange={setDobYear}
+                  testID="onboarding-dob-year-input"
                 />
               </View>
+
+              <Text
+                style={styles.derived}
+                testID="onboarding-derived-age"
+              >
+                {derivedAge !== null
+                  ? `Age: ${derivedAge} years`
+                  : "Enter a valid date of birth (13+)"}
+              </Text>
+
+              {unitPref === "metric" ? (
+                <View style={styles.inputRow}>
+                  <Input
+                    label="Height"
+                    value={heightCm}
+                    onChange={setHeightCm}
+                    unit="cm"
+                    testID="onboarding-height-input"
+                  />
+                </View>
+              ) : (
+                <View style={styles.inputRow}>
+                  <Input
+                    label="Height"
+                    value={heightFt}
+                    onChange={setHeightFt}
+                    unit="ft"
+                    testID="onboarding-height-input"
+                  />
+
+                  <Input
+                    label="Inches"
+                    value={heightIn}
+                    onChange={setHeightIn}
+                    unit="in"
+                    testID="onboarding-height-in-input"
+                  />
+                </View>
+              )}
 
               <View style={styles.inputRow}>
                 <Input
                   label="Current weight"
                   value={weight}
                   onChange={setWeight}
-                  unit="kg"
+                  unit={weightUnit}
                   testID="onboarding-weight-input"
                 />
 
@@ -276,7 +596,7 @@ export default function Onboarding() {
                   label="Target weight"
                   value={target}
                   onChange={setTarget}
-                  unit="kg"
+                  unit={weightUnit}
                   testID="onboarding-target-input"
                 />
               </View>
@@ -472,7 +792,10 @@ type InputProps = {
   onChange: (
     value: string,
   ) => void;
-  unit: string;
+  unit?: string;
+  keyboard?:
+    | "default"
+    | "decimal-pad";
   testID: string;
 };
 
@@ -481,6 +804,7 @@ function Input({
   value,
   onChange,
   unit,
+  keyboard,
   testID,
 }: InputProps) {
   return (
@@ -493,14 +817,23 @@ function Input({
         <TextInput
           value={value}
           onChangeText={onChange}
-          keyboardType="decimal-pad"
+          keyboardType={
+            keyboard ?? "decimal-pad"
+          }
+          autoCapitalize={
+            keyboard === "default"
+              ? "words"
+              : "none"
+          }
           style={styles.input}
           testID={testID}
         />
 
-        <Text style={styles.unit}>
-          {unit}
-        </Text>
+        {unit ? (
+          <Text style={styles.unit}>
+            {unit}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -558,6 +891,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
     fontWeight: "700",
+  },
+  derived: {
+    fontSize: 13,
+    color: colors.muted,
+    fontWeight: "700",
+    marginTop: -6,
   },
   options: {
     flexDirection: "row",

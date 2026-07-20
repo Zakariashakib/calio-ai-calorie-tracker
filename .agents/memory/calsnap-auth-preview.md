@@ -21,3 +21,8 @@ behavior for the whole dev server while set, so restore it afterwards.
 
 Also: RN `Animated` with `useNativeDriver: true` logs a console warning on react-native-web —
 gate it with `Platform.OS !== "web"` in shared components.
+
+**Update (July 2026):** while the temporary dev email/password login exists (see replit.md
+removal checklist), authenticated API flows CAN be verified via curl: POST /api/auth/dev/login
+returns a real session token usable as `Authorization: Bearer`. Screenshot tool still cannot
+type/click, so visual checks of logged-in screens remain limited to unauthenticated routes.
