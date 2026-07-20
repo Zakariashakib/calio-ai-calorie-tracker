@@ -1,0 +1,190 @@
+Act as a Senior React Native + Expo SDK 54 + FastAPI Engineer.
+
+The current UI is rendering, but the app is not functionally complete. Do NOT redesign the app. Keep the current premium UI and improve it.
+
+## 1. Complete the onboarding flow
+
+When a user opens the app for the first time:
+
+- Show the onboarding screens.
+- Then show a complete profile setup wizard.
+- Collect:
+  - Name
+  - Gender
+  - Date of Birth (calculate age automatically)
+  - Height
+  - Current Weight
+  - Target Weight
+  - Activity Level
+  - Goal
+      - Lose Weight
+      - Maintain Weight
+      - Gain Weight
+  - Preferred Unit (Metric/Imperial)
+
+After onboarding:
+
+Automatically calculate:
+
+- Age
+- BMI
+- BMR
+- TDEE
+- Daily Calories
+- Daily Protein Target
+- Daily Carbs Target
+- Daily Fat Target
+- Daily Water Intake
+
+Use scientifically accepted formulas:
+
+- Mifflin-St Jeor for BMR
+- Standard Activity Multipliers for TDEE
+- Healthy macro distribution
+
+Save everything to the backend and preload it on Dashboard.
+
+---
+
+## 2. Dashboard
+
+Replace every placeholder with real user data.
+
+Display:
+
+- Daily Calories
+- Remaining Calories
+- Protein Progress
+- Carbs Progress
+- Fat Progress
+- Water Progress
+- Weight Goal
+- BMI
+- Daily AI Suggestion
+
+Everything should update automatically after logging meals.
+
+---
+
+## 3. Meal Tracking
+
+When AI scan/barcode/manual entry saves food:
+
+Automatically update:
+
+- Calories
+- Protein
+- Carbs
+- Fat
+- Water
+- Dashboard
+- Daily progress
+- Weekly statistics
+- Challenges
+- Streaks
+
+---
+
+## 4. Icons
+
+Currently icons are missing and showing empty square boxes.
+
+Fix the icon system completely.
+
+Use ONE consistent icon library across the app.
+
+Recommended:
+
+- @expo/vector-icons
+- Lucide Icons
+
+Do NOT mix icon libraries.
+
+Replace every placeholder icon with premium icons.
+
+Examples:
+
+Dashboard → LayoutDashboard
+
+Scan → Camera
+
+Diary → BookOpen
+
+Recipes → ChefHat
+
+Water → Droplets
+
+Protein → Beef
+
+Calories → Flame
+
+Weight → Scale
+
+Settings → Settings
+
+Notifications → Bell
+
+Goals → Target
+
+Edit → Pencil
+
+Delete → Trash
+
+Favorite → Heart
+
+History → History
+
+Make the icon sizes, colors and spacing consistent.
+
+---
+
+## 5. UI Polish
+
+Keep the current design.
+
+Improve:
+
+- spacing
+- typography
+- shadows
+- paddings
+- cards
+- animations
+- button feedback
+- loading skeletons
+
+Target Apple Human Interface Guidelines.
+
+---
+
+## 6. Code Quality
+
+Do NOT create duplicate code.
+
+Create reusable components.
+
+Keep Expo SDK 54.
+
+Keep React Native.
+
+Keep FastAPI backend.
+
+Keep MongoDB.
+
+Do not break existing APIs.
+
+Everything must remain production-ready.
+
+Before finishing verify:
+
+✓ Onboarding works
+✓ Dashboard uses real data
+✓ BMR calculated correctly
+✓ TDEE calculated correctly
+✓ Macro calculation correct
+✓ Icons fixed
+✓ No placeholder data
+✓ No missing assets
+✓ No TypeScript errors
+✓ No runtime errors
+✓ Production-ready
