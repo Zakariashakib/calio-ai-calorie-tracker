@@ -62,10 +62,39 @@ export default function MealDetailScreen() {
       ),
     );
 
+  const addItem = () =>
+    setItems((current) => [
+      ...current,
+      {
+        item_id: `item_${Math.random().toString(36).slice(2, 12)}`,
+        name: "",
+        portion: "1 serving",
+        estimated_weight_g: 100,
+        calories: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
+        fiber_g: 0,
+        sugar_g: 0,
+        sodium_mg: 0,
+        confidence: 1,
+      },
+    ]);
+
+  // The backend requires at least one food per meal, so the last row stays.
+  const removeItem = (index: number) =>
+    setItems((current) =>
+      current.length > 1 ? current.filter((_, i) => i !== index) : current,
+    );
+
   const save = async () => {
     if (!meal) return;
     if (!title.trim()) {
       setMessage("Could not save: title is required");
+      return;
+    }
+    if (items.some((item) => !item.name.trim())) {
+      setMessage("Could not save: every food needs a name");
       return;
     }
     setSaving(true);
@@ -76,7 +105,7 @@ export default function MealDetailScreen() {
           meal_type: mealType,
           title: title.trim(),
           eaten_at: meal.eaten_at,
-          items,
+          items: items.map((item) => ({ ...item, name: item.name.trim() })),
           source: meal.source,
         }),
       });
@@ -189,6 +218,18 @@ export default function MealDetailScreen() {
             <Text style={styles.section}>Foods</Text>
             {items.map((item, index) => (
               <View key={item.item_id} style={styles.editCard} testID={`edit-food-${index}`}>
+                <View style={styles.editCardHeader}>
+                  <Text style={styles.editCardTitle}>Food {index + 1}</Text>
+                  {items.length > 1 && (
+                    <PressableScale
+                      style={styles.removeFood}
+                      onPress={() => removeItem(index)}
+                      testID={`remove-food-${index}`}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.red} />
+                    </PressableScale>
+                  )}
+                </View>
                 <View style={styles.field}>
                   <Text style={styles.fieldLabel}>Name</Text>
                   <TextInput
@@ -263,6 +304,11 @@ export default function MealDetailScreen() {
                 </View>
               </View>
             ))}
+
+            <PressableScale style={styles.addFood} onPress={addItem} testID="add-food-button">
+              <Ionicons name="add" size={19} color={colors.peach} />
+              <Text style={styles.addFoodText}>Add food</Text>
+            </PressableScale>
 
             <PressableScale style={styles.repeat} onPress={save} disabled={saving} testID="save-meal-edit-button-footer">
               {saving ? (
@@ -371,6 +417,11 @@ const styles = StyleSheet.create({
 
   editContent: { gap: 14, paddingBottom: 40 },
   editCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 13, gap: 10, ...shadow },
+  editCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  editCardTitle: { fontSize: 11, color: colors.muted, textTransform: "uppercase", fontWeight: "800", letterSpacing: 0.6 },
+  removeFood: { width: 34, height: 34, borderRadius: 13, backgroundColor: colors.canvas, alignItems: "center", justifyContent: "center" },
+  addFood: { height: 52, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.peach, borderStyle: "dashed", backgroundColor: colors.peachSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  addFoodText: { color: colors.peach, fontSize: 14, fontWeight: "800" },
   editRow: { flexDirection: "row", gap: 8 },
   field: { backgroundColor: colors.canvas, borderRadius: radius.sm, padding: 10, gap: 4 },
   fieldLabel: { fontSize: 9, color: colors.muted, textTransform: "uppercase", fontWeight: "700" },
