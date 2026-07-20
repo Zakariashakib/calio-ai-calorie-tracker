@@ -1,0 +1,96 @@
+The attached screenshot is the single source of truth. Recreate it as pixel-perfect as possible. Match the spacing, sizing, typography, colors, shadows, border radii, icon placement, navigation, and proportions. Do not redesign or reinterpret the UI.
+
+এতে AI নিজের মতো ডিজাইন করবে না।
+
+২. Project Environment স্পষ্ট করুন
+
+যেহেতু আপনার project Expo SDK 54:
+
+Use React Native + Expo SDK 54 + TypeScript.
+Do NOT use Next.js.
+Use Expo Router.
+Use NativeWind/Tailwind if already configured, otherwise use StyleSheet.
+Reuse the project's existing design system and navigation.
+৩. Existing Project নষ্ট না করতে বলুন
+
+এটা খুব জরুরি।
+
+Do not create a new app.
+
+Modify the existing CalSnap project only.
+
+Do not remove or break existing functionality.
+
+Only replace and improve the UI while keeping all current business logic, APIs, navigation, and backend integrations intact.
+৪. Apple-level Quality যোগ করুন
+Target Apple Human Interface Guidelines.
+
+Premium iOS quality.
+
+Smooth animations.
+
+Micro interactions.
+
+Native feeling.
+
+Consistent spacing.
+
+Perfect alignment.
+
+Professional shadows.
+
+60 FPS animations.
+৫. Reusable Component Requirement
+Build reusable components.
+
+Do not duplicate code.
+
+Create shared UI components.
+
+Use a scalable folder structure.
+৬. Hardcode নিষেধ করুন
+Do not hardcode layout values unnecessarily.
+
+Create reusable theme constants.
+
+Extract colors, spacing, typography, shadows, and radii into a design system.
+৭. Mock Data
+Use realistic mock data.
+
+Use Unsplash placeholder images.
+
+Make every screen appear production-ready.
+৮. Responsive Requirement
+Support
+
+iPhone SE
+
+iPhone 15 Pro
+
+iPhone 15 Pro Max
+
+Android small
+
+Android large
+
+Respect SafeArea.
+৯. Icons
+Use Lucide Icons or Expo Vector Icons consistently.
+
+Do not mix icon styles.
+১০. Quality Checklist
+
+সবশেষে এটা যোগ করুন:
+
+Before finishing, verify:
+
+✓ Pixel-perfect match
+✓ No layout overflow
+✓ Proper spacing
+✓ Responsive
+✓ Dark mode ready
+✓ TypeScript clean
+✓ No lint errors
+✓ No console warnings
+✓ Reusable components
+✓ Production-ready code
