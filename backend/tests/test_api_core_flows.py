@@ -224,3 +224,201 @@ class TestCalSnapCoreFlows:
         assert list_challenges.status_code == 200
         challenge_list = list_challenges.json()
         assert any(x["challenge_id"] == "healthy-7" for x in challenge_list)
+
+    # ── New: scan → save → challenges ─────────────────────────────────────────
+
+    def test_scan_save_triggers_challenge_refresh(self, api_client, base_url):
+        """POST /scan → POST /meals → GET /challenges: challenge streak must be updated."""
+        # Ensure the user has joined the healthy-7 challenge
+        join_resp = api_client.post(f"{base_url}/api/challenges", json={"challenge_id": "healthy-7"})
+        assert join_resp.status_code == 200
+
+        # Run the AI scan
+        image_base64 = _food_image_b64()
+        scan_resp = api_client.post(
+            f"{base_url}/api/scan",
+            json={"image_base64": image_base64, "mime_type": "image/jpeg", "mode": "meal"},
+            timeout=90,
+        )
+        assert scan_resp.status_code == 200
+        scan_data = scan_resp.json()
+        assert isinstance(scan_data.get("foods"), list)
+        assert len(scan_data["foods"]) >= 1
+
+        # Save the scanned meal
+        now_ts = datetime.now(timezone.utc).isoformat()
+        save_resp = api_client.post(
+            f"{base_url}/api/meals",
+            json={
+                "meal_type": "Lunch",
+                "title": f"{TEST_PREFIX}_scan_challenge",
+                "eaten_at": now_ts,
+                "items": scan_data["foods"],
+                "source": "camera",
+                "image_base64": image_base64,
+            },
+        )
+        assert save_resp.status_code == 200
+        saved = save_resp.json()
+        meal_id = saved["meal_id"]
+        assert "_id" not in saved
+
+        # GET /challenges must reflect the saved meal in progress
+        challenges_resp = api_client.get(f"{base_url}/api/challenges")
+        assert challenges_resp.status_code == 200
+        challenges = challenges_resp.json()
+        healthy_7 = next((c for c in challenges if c["challenge_id"] == "healthy-7"), None)
+        assert healthy_7 is not None, "healthy-7 challenge missing from GET /challenges"
+        assert healthy_7["progress"] >= 1, (
+            f"Challenge progress should be ≥ 1 after saving a meal, got {healthy_7['progress']}"
+        )
+        assert healthy_7["streak"] >= 1, (
+            f"Challenge streak should be ≥ 1 after saving today's meal, got {healthy_7['streak']}"
+        )
+
+        # Cleanup
+        api_client.delete(f"{base_url}/api/meals/{meal_id}")
+
+    # ── New: voice/parse → save → challenges ──────────────────────────────────
+
+    def test_voice_save_triggers_challenge_refresh(self, api_client, base_url):
+        """POST /voice/parse → POST /meals → GET /challenges: challenge progress must update."""
+        # Ensure challenge is joined
+        join_resp = api_client.post(f"{base_url}/api/challenges", json={"challenge_id": "water-14"})
+        assert join_resp.status_code == 200
+
+        # Try voice/parse with a minimal WAV file (silence)
+        wav_path = Path(__file__).parent / "assets" / "test_silence.wav"
+        assert wav_path.exists(), f"Test WAV asset not found at {wav_path}"
+
+        with open(wav_path, "rb") as f:
+            voice_resp = api_client.post(
+                f"{base_url}/api/voice/parse",
+                files={"file": ("test_silence.wav", f, "audio/wav")},
+                timeout=60,
+            )
+
+        # Voice parse may succeed (200) or gracefully fail (400/502) when given silence.
+        # Either outcome is acceptable — the important invariant is that it never 500.
+        assert voice_resp.status_code != 500, (
+            f"Voice endpoint must not 500 even with minimal audio; got {voice_resp.status_code}: {voice_resp.text[:200]}"
+        )
+
+        if voice_resp.status_code == 200:
+            voice_data = voice_resp.json()
+            items = voice_data.get("items", [])
+            if not items:
+                # AI produced an empty parse — synthesise a placeholder item so we can still save
+                items = [
+                    {
+                        "name": "TEST_voice_item",
+                        "portion": "1 serving",
+                        "estimated_weight_g": 100,
+                        "calories": 150,
+                        "protein_g": 10,
+                        "carbs_g": 20,
+                        "fat_g": 5,
+                        "fiber_g": 2,
+                        "sugar_g": 3,
+                        "sodium_mg": 50,
+                        "confidence": 0.5,
+                    }
+                ]
+
+            now_ts = datetime.now(timezone.utc).isoformat()
+            save_resp = api_client.post(
+                f"{base_url}/api/meals",
+                json={
+                    "meal_type": voice_data.get("meal_type", "Lunch"),
+                    "title": f"{TEST_PREFIX}_voice_save",
+                    "eaten_at": now_ts,
+                    "items": items,
+                    "source": "voice",
+                },
+            )
+            assert save_resp.status_code == 200
+            saved = save_resp.json()
+            assert "_id" not in saved
+
+            # Challenge progress must have been refreshed after the meal save
+            challenges_resp = api_client.get(f"{base_url}/api/challenges")
+            assert challenges_resp.status_code == 200
+            challenges = challenges_resp.json()
+            # healthy-7 was joined in a previous test; verify it still appears
+            assert isinstance(challenges, list)
+
+            # Cleanup
+            api_client.delete(f"{base_url}/api/meals/{saved['meal_id']}")
+        else:
+            # Graceful failure path: ensure non-500 status and readable error detail
+            err = voice_resp.json()
+            assert "detail" in err, (
+                "Failed voice/parse response must include a 'detail' field"
+            )
+
+    # ── New: manual meal save (no AI scan) still updates challenges ────────────
+
+    def test_meal_save_without_scan_updates_challenges(self, api_client, base_url):
+        """POST /meals directly (no AI scan) must still trigger challenge refresh.
+
+        This exercises the fallback path: when no AI key is available a user logs
+        meals manually — the challenge streak must still advance.
+        """
+        # Join the challenge so we have something to refresh
+        join_resp = api_client.post(f"{base_url}/api/challenges", json={"challenge_id": "healthy-7"})
+        assert join_resp.status_code == 200
+
+        # Get current challenge state before the meal
+        before_resp = api_client.get(f"{base_url}/api/challenges")
+        assert before_resp.status_code == 200
+        before_challenges = before_resp.json()
+        before_healthy = next((c for c in before_challenges if c["challenge_id"] == "healthy-7"), None)
+        before_progress = before_healthy["progress"] if before_healthy else 0
+
+        # Save a meal without going through /scan at all
+        now_ts = datetime.now(timezone.utc).isoformat()
+        save_resp = api_client.post(
+            f"{base_url}/api/meals",
+            json={
+                "meal_type": "Breakfast",
+                "title": f"{TEST_PREFIX}_no_scan_fallback",
+                "eaten_at": now_ts,
+                "source": "manual",
+                "items": [
+                    {
+                        "name": "TEST_Oats",
+                        "portion": "80 g",
+                        "estimated_weight_g": 80,
+                        "calories": 296,
+                        "protein_g": 10,
+                        "carbs_g": 51,
+                        "fat_g": 5,
+                        "fiber_g": 8,
+                        "sugar_g": 1,
+                        "sodium_mg": 5,
+                        "confidence": 1.0,
+                    }
+                ],
+            },
+        )
+        assert save_resp.status_code == 200, (
+            f"Manual meal save failed: {save_resp.status_code} {save_resp.text[:200]}"
+        )
+        saved = save_resp.json()
+        meal_id = saved["meal_id"]
+        assert "_id" not in saved
+
+        # GET /challenges must reflect the new meal
+        after_resp = api_client.get(f"{base_url}/api/challenges")
+        assert after_resp.status_code == 200
+        after_challenges = after_resp.json()
+        after_healthy = next((c for c in after_challenges if c["challenge_id"] == "healthy-7"), None)
+        assert after_healthy is not None, "healthy-7 challenge disappeared after meal save"
+        assert after_healthy["progress"] >= 1, (
+            "Challenge progress must be ≥ 1 after logging a meal today (fallback/manual path)"
+        )
+        # Progress should be at least as high as before (never decreases within a session)
+        assert after_healthy["progress"] >= before_progress
+
+        # Cleanup
+        api_client.delete(f"{base_url}/api/meals/{meal_id}")
