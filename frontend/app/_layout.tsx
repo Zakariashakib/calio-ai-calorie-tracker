@@ -11,6 +11,7 @@ import {
 import {
   AuthProvider,
 } from "@/src/auth-context";
+import { OnboardingProvider } from "@/src/onboarding-context";
 
 // Keep the native splash visible until icon fonts register.
 SplashScreen.preventAutoHideAsync();
@@ -32,12 +33,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "fade",
-          }}
-        />
+        <OnboardingProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: "fade",
+            }}
+          />
+        </OnboardingProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -6,6 +6,22 @@ export type User = {
   onboarding_complete: boolean;
 };
 
+export type OnboardingData = {
+  goal: "lose" | "maintain" | "gain" | "";
+  motivation: string;
+  obstacles: string[];
+  gender: "male" | "female" | "other" | "";
+  date_of_birth: string | null;
+  age: number | null;
+  height_cm: number;
+  weight_kg: number;
+  target_weight_kg: number;
+  activity_level: string;
+  personal_trainer: boolean | null;
+  preferred_unit: "metric" | "imperial";
+  name: string;
+};
+
 export type Nutrients = {
   calories: number;
   protein_g: number;

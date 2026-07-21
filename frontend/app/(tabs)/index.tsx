@@ -81,18 +81,32 @@ export default function TodayScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header} testID="today-sticky-header">
-        <IconButton
-          icon="calendar-clear-outline"
-          onPress={() => router.push("/challenges")}
-          testID="open-challenges-button"
-        />
+        <View style={styles.headerSide}>
+          <IconButton
+            icon="calendar-clear-outline"
+            onPress={() => router.push("/challenges")}
+            testID="open-challenges-button"
+          />
+        </View>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        <IconButton
-          icon="notifications-outline"
-          badge
-          onPress={() => router.push("/reminders")}
-          testID="open-reminders-button"
-        />
+        <View style={styles.headerSideRight}>
+          <IconButton
+            icon="cart-outline"
+            onPress={() => router.push("/shop")}
+            testID="open-shop-button"
+          />
+          <IconButton
+            icon="notifications-outline"
+            badge
+            onPress={() => router.push("/reminders")}
+            testID="open-reminders-button"
+          />
+          <IconButton
+            icon="menu-outline"
+            onPress={() => router.push("/more")}
+            testID="open-more-button"
+          />
+        </View>
       </View>
 
       <ScrollView
@@ -306,9 +320,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 10,
-    paddingBottom: 4,
+    paddingBottom: 5,
   },
-  headerTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  headerSide: { flex: 1, flexDirection: "row", alignItems: "center" },
+  headerSideRight: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2 },
+  headerTitle: { fontSize: 20, fontWeight: "800", color: colors.ink, textAlign: "center" },
 
   content: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 40, gap: 14 },
 

@@ -1,0 +1,34 @@
+VERDICT: APPROVED_WITH_COMMENTS
+The task is functionally implemented end-to-end with no blocking defects found.
+
+Critical findings / analysis:
+- Onboarding now captures name, unit preference, and DOB, and computes age client-side for immediate feedback while still submitting canonical metric values to the backend.
+- Backend `ProfileInput` correctly supports both legacy age-only clients and new DOB-based clients by accepting optional `age` + optional `date_of_birth` and enforcing that at least one is present.
+- Server-side age derivation from DOB is implemented in validation and used for goals calculations, preserving existing goals math while preventing client-side age drift.
+- Name synchronization to the account record is correctly wired in `/profile` save flow (marks onboarding complete and updates `users.name` when provided), enabling `/auth/me` to reflect the onboarding name.
+
+Security: none observed.
+
+Next actions:
+1) Add/confirm automated API + UI tests for DOB edge boundaries (birthday today, future date, 13/100 limits) and unit conversion round-trip behavior to guard against regressions.
+2) Add a small migration/backfill note (or test fixture coverage) for old profile documents missing new optional fields to ensure stable reads across clients.
+3) Memory note: `.agents/memory/calsnap-auth-preview.md` now includes a date-stamped “Update (July 2026)” and temporary-flow details that are somewhat session/implementation-specific; consider rewriting as a durable, time-agnostic rule.
+
+VERDICT: APPROVED_WITH_COMMENTS
+VERDICT: APPROVED_WITH_COMMENTS
+The task is functionally implemented end-to-end with no blocking defects found.
+
+Critical findings / analysis:
+- Onboarding now captures name, unit preference, and DOB, and computes age client-side for immediate feedback while still submitting canonical metric values to the backend.
+- Backend `ProfileInput` correctly supports both legacy age-only clients and new DOB-based clients by accepting optional `age` + optional `date_of_birth` and enforcing that at least one is present.
+- Server-side age derivation from DOB is implemented in validation and used for goals calculations, preserving existing goals math while preventing client-side age drift.
+- Name synchronization to the account record is correctly wired in `/profile` save flow (marks onboarding complete and updates `users.name` when provided), enabling `/auth/me` to reflect the onboarding name.
+
+Security: none observed.
+
+Next actions:
+1) Add/confirm automated API + UI tests for DOB edge boundaries (birthday today, future date, 13/100 limits) and unit conversion round-trip behavior to guard against regressions.
+2) Add a small migration/backfill note (or test fixture coverage) for old profile documents missing new optional fields to ensure stable reads across clients.
+3) Memory note: `.agents/memory/calsnap-auth-preview.md` now includes a date-stamped “Update (July 2026)” and temporary-flow details that are somewhat session/implementation-specific; consider rewriting as a durable, time-agnostic rule.
+
+VERDICT: APPROVED_WITH_COMMENTS

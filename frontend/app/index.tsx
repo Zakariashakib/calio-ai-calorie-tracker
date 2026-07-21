@@ -69,7 +69,7 @@ export default function Index() {
 
         <PressableScale
           style={styles.button}
-          onPress={signIn}
+          onPress={() => router.push("/onboarding/welcome")}
           disabled={loading}
           testID="google-login-button"
         >

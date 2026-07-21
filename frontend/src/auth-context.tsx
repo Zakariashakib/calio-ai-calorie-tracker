@@ -12,7 +12,7 @@ type AuthValue = {
   user: User | null;
   loading: boolean;
   error: string | null;
-  signIn: () => Promise<void>;
+  signIn: (options?: { skipRedirect?: boolean }) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
   /** DEV-ONLY: temporary email/password login — remove before production (see replit.md). */
@@ -50,7 +50,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const me = await api<User>("/auth/me");
       setUser(me);
     } catch {
-      setUser(null);
+      // DEV: Try reading user from local storage when backend is unavailable
+      try {
+        const saved = await storage.getItem("mock_user", null);
+        if (saved && typeof saved === "string") {
+          setUser(JSON.parse(saved));
+        } else {
+          setUser(null);
+        }
+      } catch {
+        setUser(null);
+      }
     }
   }, []);
 
@@ -103,24 +113,43 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => listener?.remove();
   }, [exchange, refreshUser]);
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (options?: { skipRedirect?: boolean }) => {
     setError(null);
-    const redirectUrl = Platform.OS === "web" && typeof window !== "undefined" ? `${window.location.origin}/` : Linking.createURL("");
-    const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      window.location.href = authUrl;
-      return;
+    try {
+      // DEV: Check if user already completed onboarding previously
+      const saved = await storage.getItem("mock_user", null);
+      if (saved && typeof saved === "string") {
+        const existingUser: User = JSON.parse(saved);
+        await storage.secureSet(TOKEN_KEY, "mock_token");
+        setUser(existingUser);
+        if (!options?.skipRedirect) {
+          router.replace(existingUser.onboarding_complete ? "/(tabs)" : "/onboarding/welcome");
+        }
+      } else {
+        // New user → go through onboarding
+        const mockUser: User = {
+          user_id: "mock_123",
+          email: "test@example.com",
+          name: "",
+          onboarding_complete: false,
+        };
+        await storage.secureSet(TOKEN_KEY, "mock_token");
+        await storage.setItem("mock_user", JSON.stringify(mockUser));
+        setUser(mockUser);
+        if (!options?.skipRedirect) {
+          router.replace("/onboarding/welcome");
+        }
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Sign-in failed");
     }
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-    if (result.type === "success") {
-      const sessionId = sessionIdFrom(result.url);
-      if (sessionId) await exchange(sessionId);
-    }
-  }, [exchange]);
+  }, []);
 
   const signOut = useCallback(async () => {
     try { await api("/auth/logout", { method: "POST", body: "{}" }); } catch { /* local logout still succeeds */ }
     await storage.secureRemove(TOKEN_KEY);
+    await storage.removeItem("mock_user");
+    await storage.removeItem("mock_profile");
     setUser(null);
     router.replace("/");
   }, []);
@@ -128,7 +157,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   // DEV-ONLY-START: temporary email/password login for development & testing.
   // Remove this block, the devSignIn type above, and its usage in the value
   // memo below before production (see replit.md removal checklist).
-  const devSignIn = useCallback(async (email: string, password: string) => {
+  const devSignIn = useCallback(async (email: string, password: string, options?: { skipRedirect?: boolean }) => {
     setError(null);
     const response = await fetch(`${API_BASE}/api/auth/dev/login`, {
       method: "POST",
@@ -142,7 +171,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const data = (await response.json()) as { user: User; session_token: string };
     await storage.secureSet(TOKEN_KEY, data.session_token);
     setUser(data.user);
-    router.replace(data.user.onboarding_complete ? "/(tabs)" : "/onboarding");
+    if (!options?.skipRedirect) {
+      router.replace(data.user.onboarding_complete ? "/(tabs)" : "/onboarding/welcome");
+    }
   }, []);
   // DEV-ONLY-END
 
